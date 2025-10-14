@@ -1,0 +1,25 @@
+# Ignore data folders
+data/
+*/data/
+
+# Ignore large files
+*.sra
+*.fastq
+*.fastq.gz
+*.zip
+*.tar
+*.tar.gz
+
+# Ignore Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Ignore Python cache and virtual env
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env/
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
