@@ -8,34 +8,36 @@ Works in both Jupyter Notebook and CLI.
 import os
 import time
 import csv
+import requests
 import subprocess
+import shutil
 from pathlib import Path
+from io import StringIO
 from typing import Optional, List
 import pandas as pd
 from Bio import Entrez
 from tqdm import tqdm
-import requests
-import io
 
+# Helper: run command and raise with readable error
+def run_cmd(cmd, **kwargs):
+    try:
+        subprocess.run(cmd, check=True, **kwargs)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{e}")
 
 class SRAExtractor:
     def __init__(self,
-                 project_root: Optional[str] = None,
-                 email: Optional[str] = None,
+                 project_root: Optional[str] = ".",
+                 email = None,
                  default_retmax: int = 20,
                  sleep_between_requests: float = 0.34):
         """
         project_root: root folder for the project (creates data/metadata, data/sequences)
         email: NCBI Entrez email (required)
+        default_retmax: default number of run records to request
+        sleep_between_requests: delay between Entrez requests to avoid rate limits
         """
-        # ✅ Auto-detect project root two levels up (scripts/ -> project root)
-        if project_root is None:
-            # ensures correct root even when called from notebooks/
-            self.project_root = Path(__file__).resolve().parent.parent
-        else:
-            self.project_root = Path(project_root).resolve()
-
-        # Create necessary directories
+        self.project_root = Path(project_root).resolve()
         self.data_meta = self.project_root / "data" / "metadata"
         self.data_seq = self.project_root / "data" / "sequences"
         self.data_meta.mkdir(parents=True, exist_ok=True)
@@ -44,14 +46,13 @@ class SRAExtractor:
         self.default_retmax = default_retmax
         self.sleep_between_requests = sleep_between_requests
 
-        # ✅ Ensure email setup
+        # Email setup
         if email:
             self.email = email
         elif getattr(Entrez, "email", None):
             self.email = Entrez.email
         else:
             self.email = input("Enter your email (required for NCBI Entrez): ").strip()
-
         Entrez.email = self.email
 
         print(f"[INFO] Project initialized at {self.project_root}")
@@ -75,6 +76,8 @@ class SRAExtractor:
         Fetch SRA run metadata for a given organism name or list of IDs.
         Saves CSV metadata file to data/metadata.
         """
+        import io
+
         retmax = retmax or self.default_retmax
         print(f"[INFO] Fetching metadata for '{organism_or_idlist}' (retmax={retmax})")
 
@@ -111,8 +114,12 @@ class SRAExtractor:
             print(f"[ERROR] Failed to fetch runinfo: {e}")
             return pd.DataFrame()
 
+
     def save_metadata(self, df: pd.DataFrame, filename: Optional[str] = None) -> Path:
-        fname = filename or f"SraRunInfo_{int(time.time())}.csv"
+        if filename is None:
+            fname = f"SraRunInfo_{int(time.time())}.csv"
+        else:
+            fname = filename
         out = self.data_meta / fname
         df.to_csv(out, index=False)
         print(f"[INFO] Metadata saved to {out}")
@@ -139,33 +146,55 @@ class SRAExtractor:
     # Sequence download
     #######################################################
     def _get_ena_fastq_links(self, run_id: str) -> list:
-        """Fetch FASTQ download URLs for a given SRR run from ENA."""
+        """
+        Fetch FASTQ download URLs for a given SRR run from ENA.
+        """
         url = (
             "https://www.ebi.ac.uk/ena/portal/api/filereport"
             f"?accession={run_id}&result=read_run&fields=fastq_ftp&format=tsv"
         )
+
         try:
             r = requests.get(url, timeout=30)
             r.raise_for_status()
             lines = r.text.strip().split("\n")
+
             if len(lines) < 2:
-                print(f"[WARN] No FASTQ entries found for {run_id}.")
                 return []
+
+            # last column is fastq_ftp; may contain semicolon-separated ftp paths
             fastq_field = lines[1].split("\t")[-1].strip()
             if not fastq_field:
                 return []
-            fastq_links = fastq_field.split(";")
-            fastq_links = [f"https://{link.strip()}" if not link.startswith("http") else link
-                           for link in fastq_links if link.strip()]
-            return fastq_links
+
+            links = []
+            for part in fastq_field.split(";"):
+                part = part.strip()
+                if not part:
+                    continue
+                # ENA returns ftp paths like ftp.sra.ebi.ac.uk/vol1/fastq/...
+                if part.startswith("ftp://") or part.startswith("http://") or part.startswith("https://"):
+                    links.append(part)
+                else:
+                    links.append("https://" + part)  # convert ftp path to https
+            return links
+
         except Exception as e:
-            print(f"[ERROR] Could not retrieve ENA links for {run_id}: {e}")
+            print(f"[WARN] Could not retrieve ENA links for {run_id}: {e}")
             return []
 
     def _download_file(self, url, outpath):
+        """
+        Robust streaming download with resume support.
+        Returns Path or None on failure.
+        """
+        import requests
+        from tqdm import tqdm
+
         outpath = Path(outpath)
         tmp_path = outpath.with_suffix(outpath.suffix + ".part")
         headers = {}
+
         if tmp_path.exists():
             existing_size = tmp_path.stat().st_size
             headers["Range"] = f"bytes={existing_size}-"
@@ -183,8 +212,12 @@ class SRAExtractor:
         mode = "ab" if existing_size > 0 else "wb"
 
         with open(tmp_path, mode) as f, tqdm(
-            total=total_size, initial=existing_size, unit="B", unit_scale=True,
-            desc=outpath.name, leave=True
+            total=total_size,
+            initial=existing_size,
+            unit="B",
+            unit_scale=True,
+            desc=outpath.name,
+            leave=True,
         ) as pbar:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
@@ -194,20 +227,25 @@ class SRAExtractor:
         tmp_path.rename(outpath)
         return outpath
 
-    def download_runs(self, run_ids, prefer_ena=True):
-        """Download FASTQ files for given SRR IDs (from ENA or NCBI)."""
-        import subprocess
-        from datetime import datetime
+    def _compress_fastq(self, fq_path: Path, threads: int = 4):
+        """
+        Compress a .fastq file to .fastq.gz using pigz if available, else gzip.
+        Removes original .fastq on success.
+        """
+        pigz = shutil.which("pigz")
+        if pigz:
+            run_cmd([pigz, "-p", str(threads), str(fq_path)])
+        else:
+            run_cmd(["gzip", "-f", str(fq_path)])
+        gz_path = fq_path.with_suffix(fq_path.suffix + ".gz")
+        return gz_path
 
+    def download_runs(self, run_ids, prefer_ena=True, threads: int = 4):
         if isinstance(run_ids, str):
             run_ids = [run_ids]
 
         log_file = self.data_seq / "download_log.csv"
         log_exists = log_file.exists()
-
-        sra_temp_dir = self.data_seq / "sra_temp"
-        sra_temp_dir.mkdir(parents=True, exist_ok=True)
-
         with open(log_file, "a", newline="") as log:
             writer = csv.writer(log)
             if not log_exists:
@@ -215,82 +253,93 @@ class SRAExtractor:
 
             for run in run_ids:
                 run_dir = self.data_seq / run
-                run_dir.mkdir(exist_ok=True)
+                run_dir.mkdir(parents=True, exist_ok=True)
                 downloaded_files = []
 
-                # Skip if already downloaded
-                if any(run_dir.glob("*.fastq*")):
+                # quick skip if gz already present
+                if any(run_dir.glob("*.fastq.gz")):
                     print(f"✅ {run} already downloaded — skipping.")
-                    writer.writerow([run, "exists", "existing", datetime.now().strftime("%Y-%m-%d %H:%M")])
+                    writer.writerow([run, "exists", "existing", time.strftime("%Y-%m-%d %H:%M")])
                     continue
 
                 print(f"\n🔽 Downloading {run}...")
+                urls = []
+                if prefer_ena:
+                    urls = self._get_ena_fastq_links(run)
 
-                urls = self._get_ena_fastq_links(run) if prefer_ena else []
-
-                # ==============================
-                # 🔹 ENA FASTQ DOWNLOAD PATHWAY
-                # ==============================
                 if urls:
                     print(f"Found {len(urls)} FASTQ file(s) on ENA.")
                     for url in urls:
                         fname = Path(url).name
                         outpath = run_dir / fname
                         if not outpath.exists():
-                            self._download_file(url, outpath)
+                            res = self._download_file(url, outpath)
+                            if res is None:
+                                print(f"[WARN] Failed to download {url}")
+                                continue
+
+                        # If file is not gz, compress it
+                        if outpath.suffix != ".gz" and not outpath.name.endswith(".fastq.gz"):
+                            # assume it's fastq; compress in place
+                            self._compress_fastq(outpath, threads=threads)
+                            outpath = outpath.with_suffix(outpath.suffix + ".gz")
                         downloaded_files.append(str(outpath))
-                    writer.writerow([run, "downloaded_ENA", ";".join(downloaded_files),
-                                    datetime.now().strftime("%Y-%m-%d %H:%M")])
+                    writer.writerow([run, "downloaded", ";".join(downloaded_files), time.strftime("%Y-%m-%d %H:%M")])
 
-                # ==============================
-                # 🔹 NCBI FASTQ DOWNLOAD PATHWAY
-                # ==============================
                 else:
-                    print(f"⚠️ No ENA FASTQ found for {run}. Attempting NCBI prefetch + fasterq-dump...")
+                    print(f"⚠️ No ENA FASTQ found for {run}. Attempting NCBI prefetch...")
                     try:
-                        # Step 1: Prefetch the SRA data
-                        subprocess.run(["prefetch", run, "--output-directory", str(sra_temp_dir)], check=True)
+                        # Force prefetch to put the .sra file inside the run_dir
+                        prefetch_cmd = [
+                            "prefetch",
+                            run,
+                            "--output-directory", str(run_dir)
+                        ]
+                        run_cmd(prefetch_cmd)
 
-                        # Step 2: Detect correct SRA file path
-                        sra_subdir = sra_temp_dir / run
-                        sra_file = sra_subdir / f"{run}.sra"
+                        # find the sra file under run_dir (prefetch may create nested dirs)
+                        sra_candidates = list(run_dir.rglob(f"{run}.sra"))
+                        if not sra_candidates:
+                            raise FileNotFoundError(f".sra file for {run} not found under {run_dir}")
+                        sra_path = sra_candidates[0]
 
-                        # Bonus fallback — check recursively if not found
-                        if not sra_file.exists():
-                            print(f"⚠️ Expected .sra not found at {sra_file}, checking subdirectories...")
-                            for path in sra_temp_dir.glob(f"**/{run}.sra"):
-                                sra_file = path
-                                print(f"✅ Found alternative SRA file at: {sra_file}")
-                                break
+                        # Convert SRA -> FASTQ
+                        fasterq_cmd = [
+                            "fasterq-dump",
+                            str(sra_path),
+                            "-O", str(run_dir),
+                            "--threads", str(threads)
+                        ]
+                        run_cmd(fasterq_cmd)
 
-                        # Step 3: Convert .sra → .fastq
-                        if sra_file.exists():
-                            subprocess.run(["fasterq-dump", str(sra_file), "-O", str(run_dir)], check=True)
-                            # Step 4: Clean up (delete .sra + its folder)
-                            try:
-                                sra_file.unlink()
-                                if sra_subdir.exists():
-                                    sra_subdir.rmdir()
-                            except Exception as cleanup_err:
-                                print(f"[WARN] Could not remove temp files: {cleanup_err}")
+                        # After successful conversion, delete .sra immediately (Option C)
+                        if sra_path.exists():
+                            sra_path.unlink()
+                            print(f"🗑️ Deleted SRA file: {sra_path}")
 
-                            writer.writerow([run, "downloaded_NCBI", "prefetch/fasterq-dump",
-                                            datetime.now().strftime("%Y-%m-%d %H:%M")])
-                        else:
-                            print(f"❌ Could not locate .sra file for {run} even after search.")
-                            writer.writerow([run, "failed", "sra_not_found",
-                                            datetime.now().strftime("%Y-%m-%d %H:%M")])
+                        # Compress any produced .fastq files
+                        gz_files = []
+                        for fq in run_dir.glob("*.fastq"):
+                            gz = self._compress_fastq(fq, threads=threads)
+                            gz_files.append(str(gz))
 
-                    except subprocess.CalledProcessError as e:
-                        print(f"❌ NCBI prefetch/fasterq-dump failed for {run}: {e}")
+                        if not gz_files:
+                            raise RuntimeError("fasterq-dump produced no .fastq files")
+
+                        writer.writerow([run, "downloaded_ncbi", ";".join(gz_files),
+                                        time.strftime("%Y-%m-%d %H:%M")])
+                        downloaded_files = gz_files
+
+                    except Exception as e:
+                        print(f"❌ NCBI fallback failed for {run}: {e}")
                         writer.writerow([run, "failed", str(e),
-                                        datetime.now().strftime("%Y-%m-%d %H:%M")])
+                                        time.strftime("%Y-%m-%d %H:%M")])
 
-        print("[INFO] ✅ All downloads completed.")
+        print("[INFO] All downloads completed.")
 
 
 #######################################################
-# CLI entry point
+# Optional CLI entry point
 #######################################################
 
 if __name__ == "__main__":
@@ -302,25 +351,19 @@ if __name__ == "__main__":
     parser.add_argument("--retmax", type=int, default=20, help="Number of samples to fetch")
     parser.add_argument("--download", action="store_true", help="Download sequences after fetching metadata")
     parser.add_argument("--runs", type=str, help="Comma-separated SRR IDs to download")
+    parser.add_argument("--threads", type=int, default=4, help="Threads for fasterq-dump / pigz")
     args = parser.parse_args()
 
     ex = SRAExtractor(email=args.email)
-
     organism = args.organism or input("Enter organism name: ")
     df = ex.fetch_runinfo(organism, retmax=args.retmax)
     fname = f"SraRunInfo_{organism.replace(' ', '_')}.csv"
     ex.save_metadata(df, fname)
-
-    # ✅ dynamic preview length
-    try:
-        n = int(input("Enter number of sequences to preview (default 5): ") or 5)
-    except ValueError:
-        n = 5
-    ex.preview_metadata(fname, n=n)
+    ex.preview_metadata(fname, n=5)
 
     if args.download or input("Download sequences? (y/n): ").lower() in ("y", "yes"):
         if args.runs:
             run_ids = [r.strip() for r in args.runs.split(",")]
         else:
-            run_ids = df["Run"].dropna().tolist() if "Run" in df.columns else []
-        ex.download_runs(run_ids)
+            run_ids = df["Run"].dropna().tolist()
+        ex.download_runs(run_ids, threads=args.threads)
