@@ -1,0 +1,9 @@
+pandas
+biopython
+tqdm
+requests
+snakemake
+pulp==2.7.0
+numpy
+matplotlib
+

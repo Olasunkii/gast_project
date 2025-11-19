@@ -1,0 +1,12 @@
+email: "youremail@yahoo.com"
+organism: "Klebsiella pneumoniae"
+retmax: 2
+
+# config.yaml
+organism: "Klebsiella pneumoniae"
+email: "youremail@example.com"
+retmax: 2
+
+paths:
+  metadata_dir: "data/metadata"
+  sequences_dir: "data/sequences"
