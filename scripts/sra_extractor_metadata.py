@@ -8,8 +8,7 @@ retmax=int(sys.argv[3])
 
 Entrez.email=email
 ex=SRAExtractor()
-# Fetch metadata
-df=ex.fetch_runinfo_paired(organism,retmax=retmax)
-# Save enriched metadata (so we keep size_human, reads, etc.)
-fname=f"SraRunInfo_{organism.replace(' ','_')}.csv"
+# Fetch metadata and AST table
+df=ex.resistant_paired_metadata(organism,retmax=retmax)
+fname=f"SraRunInfo_{organism.replace(' ','_')}.csv"# Save metadata)
 ex.save_metadata(df,fname)

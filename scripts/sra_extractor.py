@@ -17,6 +17,7 @@ from typing import Optional, List
 import pandas as pd
 from Bio import Entrez
 from tqdm import tqdm
+import xml.etree.ElementTree as ET
 
 # Helper: run command and raise with readable error
 def run_cmd(cmd, **kwargs):
@@ -40,8 +41,10 @@ class SRAExtractor:
         self.project_root = Path(project_root).resolve()
         self.data_meta = self.project_root / "data" / "metadata"
         self.data_seq = self.project_root / "data" / "sequences"
+        self.ast_dir= self.project_root / "data" / "ast"
         self.data_meta.mkdir(parents=True, exist_ok=True)
         self.data_seq.mkdir(parents=True, exist_ok=True)
+        self.ast_dir.mkdir(parents=True, exist_ok=True)
 
         self.default_retmax = default_retmax
         self.sleep_between_requests = sleep_between_requests
@@ -58,6 +61,7 @@ class SRAExtractor:
         print(f"[INFO] Project initialized at {self.project_root}")
         print(f"Metadata folder: {self.data_meta}")
         print(f"Sequences folder: {self.data_seq}")
+        print(f"Antimicrobial susceptibility testing (AST) folder: {self.ast_dir}")
 
     #######################################################
     # Metadata fetching
@@ -373,6 +377,83 @@ class SRAExtractor:
             result = pd.concat(frames, ignore_index=True)
             return result.head(retmax)
         return pd.DataFrame()#if no paired end is found
+    
+    def search_biosample_resistant(self, organism: str, retmax: int) -> list:
+        """This function looks for BioSamples that are from the corresponding organism 
+            and contains a antibiogram table. 
+            Return: id list of BioSample only numeric part of the id"""
+        term = f'{organism}[Organism] AND antibiogram[filter]'
+        h = Entrez.esearch(db="biosample", term=term, retmax=retmax)
+        r = Entrez.read(h)
+        return r.get("IdList", [])
+
+    def biosample_to_sra(self, biosample_ids: list) -> list:
+        """This function links the found biosample ids to a SRA run identifiers"""
+        sra_ids = []
+        for bid in biosample_ids:
+            try:
+                link = Entrez.elink(dbfrom="biosample", db="sra", id=bid)
+                record = Entrez.read(link)
+            except:
+                continue
+            for item in record[0].get("LinkSetDb", []):
+                if item.get("DbTo") == "sra":
+                    for link_item in item.get("Link", []):
+                        sra_ids.append(link_item["Id"])
+        return sra_ids
+
+    def fetch_sra_paired(self, sra_ids: list) -> pd.DataFrame:
+        import io
+        df = pd.DataFrame()
+        if not sra_ids:
+            return df
+        with Entrez.efetch(db="sra", id=",".join(sra_ids), rettype="runinfo", retmode="text") as handle:
+            raw = handle.read()
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", errors="replace")
+        df = pd.read_csv(io.StringIO(str(raw)))
+        df = df[df["LibraryLayout"] == "PAIRED"]#only paired sequences
+        return df
+
+    def fetch_antibiogram(self, biosample_id: str) -> pd.DataFrame:
+        if not biosample_id:
+            return None
+
+        try:
+            h = Entrez.efetch(db="biosample", id=biosample_id, rettype="xml")
+            data = h.read()
+            root = ET.fromstring(data)
+        except:
+            return None
+
+        table = root.find(".//Table")
+        if table is None:
+            return pd.DataFrame()#no existing antibiogram table?
+        #transform xml to pandas dataframe
+        header_cells = table.find("Header").findall("Cell")
+        columns = [cell.text for cell in header_cells]
+        rows = []
+        for row in table.find("Body").findall("Row"):
+            cells = [cell.text if cell.text is not None else "" for cell in row.findall("Cell")]
+            rows.append(cells)
+        return pd.DataFrame(rows, columns=columns)# to pandas table
+
+    def resistant_paired_metadata(self, organism: str, retmax: int) -> pd.DataFrame:
+        biosample_ids = self.search_biosample_resistant(organism, retmax)
+        sra_ids = self.biosample_to_sra(biosample_ids)
+        df = self.fetch_sra_paired(sra_ids)
+
+        if df.empty:
+            return df
+        for biosample in df["BioSample"]:
+            ast = self.fetch_antibiogram(biosample)
+            if not ast.empty:
+                out_file = self.ast_dir / f"{biosample}.csv"
+                ast.to_csv(out_file, index=False)
+                print(f"[INFO] AST table saved to {out_file} for sample {biosample}")
+
+        return df
+
 
 #######################################################
 # Optional CLI entry point
@@ -392,8 +473,8 @@ if __name__ == "__main__":
 
     ex = SRAExtractor(email=args.email)
     organism = args.organism or input("Enter organism name: ")
-    #only paired sequences; if this does not matter use the fetch_runinfo()
-    df = ex.fetch_runinfo_paired(organism, retmax=args.retmax)
+    # any sequence:fetch_runinfo(); only paired:fetch_runinfo_paired();known AST sequences:resistant_paired_metadata
+    df = ex.resistant_paired_metadata(organism, args.retmax)
     fname = f"SraRunInfo_{organism.replace(' ', '_')}.csv"
     ex.save_metadata(df, fname)
     ex.preview_metadata(fname, n=5)
