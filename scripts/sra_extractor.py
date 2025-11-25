@@ -337,6 +337,42 @@ class SRAExtractor:
 
         print("[INFO] All downloads completed.")
 
+    def fetch_runinfo_paired(self, organism: str, retmax: int) -> pd.DataFrame:
+        """This function searches for paired sequences in batches.
+            each cycle retrieves a retmax of identifiers and get's discarded if not paired.
+            It continues searching until the retmax number is reached or no further samples are retrieved.
+            only the exact number of requested samples are retrieved"""
+        import io
+        retmax = retmax or self.default_retmax
+        start = 0 # index offset for Entrez search pagination 
+        collected = 0
+        frames = []
+
+        while collected < retmax:
+            handle = Entrez.esearch(db="sra",term=organism,retstart=start,retmax=retmax)
+            record = Entrez.read(handle)
+            handle.close()
+            ids = record.get("IdList", [])
+            if not ids:
+                break
+
+            with Entrez.efetch(db="sra", id=",".join(ids), rettype="runinfo", retmode="text") as handle:
+                raw_data = handle.read()
+
+            if isinstance(raw_data, bytes):
+                raw_data = raw_data.decode("utf-8", errors="replace")
+
+            df = pd.read_csv(io.StringIO(str(raw_data)))
+            df = df[df["LibraryLayout"] == "PAIRED"]#check on only paired sequences
+
+            frames.append(df)
+            collected += len(df)
+            start += retmax#retrieve next batch of records
+        # if multiple rows are found; concate them into one dataframe
+        if frames:
+            result = pd.concat(frames, ignore_index=True)
+            return result.head(retmax)
+        return pd.DataFrame()#if no paired end is found
 
 #######################################################
 # Optional CLI entry point
@@ -356,7 +392,8 @@ if __name__ == "__main__":
 
     ex = SRAExtractor(email=args.email)
     organism = args.organism or input("Enter organism name: ")
-    df = ex.fetch_runinfo(organism, retmax=args.retmax)
+    #only paired sequences; if this does not matter use the fetch_runinfo()
+    df = ex.fetch_runinfo_paired(organism, retmax=args.retmax)
     fname = f"SraRunInfo_{organism.replace(' ', '_')}.csv"
     ex.save_metadata(df, fname)
     ex.preview_metadata(fname, n=5)
