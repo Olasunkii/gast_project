@@ -8,3 +8,4 @@ paths:
   sequences_dir: "data/sequences"
   ast_dir: "data/ast"
   results_dir: "results"
+  reference_db_dir: "ref_db"

@@ -6,6 +6,7 @@ METADATA_DIR = config['paths']['metadata_dir']
 SEQ_DIR = config['paths']['sequences_dir']
 AST_DIR = config['paths']['ast_dir']
 RESULTS_DIR = config['paths']['results_dir']
+db_DIR = config['paths']['reference_db_dir']
 
 # -------------------------------------------------------
 # Function: load sample names dynamically after metadata exists
@@ -28,8 +29,9 @@ rule all:
     input:
         f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
         f"{SEQ_DIR}/download_log.csv",
-        expand(f"{RESULTS_DIR}/fastqc/{{sample}}/{{sample}}_1_val_1_fastqc.zip", sample=get_sample_ids),
-        expand(f"{RESULTS_DIR}/fastqc/{{sample}}/{{sample}}_2_val_2_fastqc.zip", sample=get_sample_ids),
+        expand(f"{RESULTS_DIR}/checkm/{{sample}}", sample=get_sample_ids),
+        expand(f"{RESULTS_DIR}/bakta/{{sample}}/{{sample}}.fna", sample=get_sample_ids),
+        expand(f"{RESULTS_DIR}/amrfinder/{{sample}}/{{sample}}_amrfinder.tsv", sample=get_sample_ids)
 
 # -------------------------------------------------------
 # Rule: fetch_metadata — downloads SraRunInfo file
@@ -119,3 +121,85 @@ rule fastqc:
 # -------------------------------------------------------
 # Rule: unicycler — assembly to draft genome
 # -------------------------------------------------------
+rule unicycler_assembly:
+    input:
+        r1=f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_1_val_1.fq.gz",
+        r2=f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_2_val_2.fq.gz"
+    output:
+        f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta"
+    conda:
+        "envs/environment_qc.yaml"
+    threads: 16
+    shell:
+        "unicycler -1 {input.r1} -2 {input.r2} -o {RESULTS_DIR}/assembly/{wildcards.sample} -t {threads}"
+# -------------------------------------------------------
+# Rule: Checkm2 — Analyze contamination on draft genome
+# -------------------------------------------------------
+rule checkm:
+    input:
+        f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta"
+    output:
+        directory(f"{RESULTS_DIR}/checkm/{{sample}}")
+    conda:
+        "envs/environment_checkm.yaml"
+    threads: 16
+    params:
+        db=f"{db_DIR}/checkm2_db/uniref100.KO.1.dmnd"
+    shell:
+        """
+        checkm2 predict --input {input} --output-directory {output} \
+                --threads {threads} --database_path {params.db}
+        """
+# -------------------------------------------------------
+# Rule: Bakta — gene annotation
+# -------------------------------------------------------
+rule bakta:
+    input:
+        f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta"
+    output:
+        fna = f"{RESULTS_DIR}/bakta/{{sample}}/{{sample}}.fna"
+    conda:
+        "envs/environment_bakta.yaml"
+    threads: 16
+    params:
+        db = f"{db_DIR}/bakta_db"
+    shell:
+        """
+        rm -rf results/bakta/{wildcards.sample}
+        bakta --db {params.db} \
+              --output {RESULTS_DIR}/bakta/{wildcards.sample} \
+              --prefix {wildcards.sample} \
+              --threads {threads} \
+              {input}
+        """
+# -------------------------------------------------------
+# Rule: AMRFinderPlus — Antibiotic gene resistance annotation
+# -------------------------------------------------------
+rule amrfinder_db:
+    output:
+        touch("amrfinder_db_ready.txt")
+    conda:
+        "envs/environment_amr.yaml"
+    shell:
+        """
+        amrfinder --force_update
+        """
+
+rule amrfinder:
+    input:
+        fasta = f"{RESULTS_DIR}/bakta/{{sample}}/{{sample}}.fna",
+        db_updated = "amrfinder_db_ready.txt"
+    output:
+        out = f"{RESULTS_DIR}/amrfinder/{{sample}}/{{sample}}_amrfinder.tsv"
+    conda:
+        "envs/environment_amr.yaml"
+    threads: 8
+    shell:
+        """
+        mkdir -p {RESULTS_DIR}/amrfinder/{wildcards.sample}
+        amrfinder --nucleotide {input.fasta} --annotation_format bakta \
+                  --plus \
+                  --organism Klebsiella_pneumoniae \
+                  --output {output.out} \
+                  --threads {threads}
+        """
