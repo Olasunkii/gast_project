@@ -30,6 +30,8 @@ rule all:
         f"{SEQ_DIR}/download_log.csv",
         expand(f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_1.fastq.gz", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_2.fastq.gz", sample=get_sample_ids),
+        expand(f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_1_val_1.fq.gz", sample=get_sample_ids),
+        expand(f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_2_val_2.fq.gz", sample=get_sample_ids),
 
 # -------------------------------------------------------
 # Rule: fetch_metadata — downloads SraRunInfo file
@@ -65,7 +67,7 @@ checkpoint download_sequences:
         """
 
 # -------------------------------------------------------
-# Rule: fastp — cleaning sequences
+# Rule: fastp — cleaning sequences & sequence analysis
 # -------------------------------------------------------
 rule fastp:
     input:
@@ -83,4 +85,20 @@ rule fastp:
         fastp -i {input.r1} -I {input.r2} \
         -o {output.r1} -O {output.r2} \
         -h {output.html} -j {output.json}
+        """
+# -------------------------------------------------------
+# Rule: trimgalore — adapter trimming
+# -------------------------------------------------------
+rule trim_galore:
+    input:
+        r1=f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_1.fastq.gz",
+        r2=f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_2.fastq.gz"
+    output:
+        r1=f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_1_val_1.fq.gz",
+        r2=f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_2_val_2.fq.gz"
+    conda:
+        "envs/environment_qc.yaml"
+    shell:
+        """
+        trim_galore --paired --gzip -o {RESULTS_DIR}/trim_galore/{wildcards.sample} {input.r1} {input.r2}
         """
