@@ -1,0 +1,16 @@
+name: quality_control_and_assembly
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - fastp=0.23.4
+  - trim-galore=0.6.10
+  - fastqc=0.12.1
+  - pigz
+  - gzip
+  - unicycler
+  - spades >=3.14
+  - racon
+  - checkm2
+  - ncbi-amrfinderplus

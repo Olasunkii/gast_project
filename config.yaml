@@ -7,3 +7,4 @@ paths:
   metadata_dir: "data/metadata"
   sequences_dir: "data/sequences"
   ast_dir: "data/ast"
+  results_dir: "results"

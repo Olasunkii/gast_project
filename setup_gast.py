@@ -18,6 +18,7 @@ def init_structure(base_dir="project_gast"):
     folders = [
         base / "data" / "metadata",
         base / "data" / "sequences",
+        base / "data" / "ast",
         base / "output",
         base / "notebooks",
         base / "scripts"
