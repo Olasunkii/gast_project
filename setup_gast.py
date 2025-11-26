@@ -36,6 +36,7 @@ def init_structure(base_dir="project_gast"):
                 "data_dir": str(base / "data"),
                 "metadata_dir": str(base / "data" / "metadata"),
                 "sequence_dir": str(base / "data" / "sequences"),
+                "ast_dir": str(base / "data" / "ast"),
                 "output_dir": str(base / "output")
             },
             "email": "your_email@example.com",

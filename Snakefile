@@ -21,8 +21,6 @@ rule fetch_metadata:
         organism=organism_safe,
         retmax=config["retmax"],
         outdir=config["paths"]["metadata_dir"]
-    container:
-        "wgs_pipeline:latest"
     shell:
         """
         mkdir -p {params.outdir}
@@ -37,8 +35,6 @@ rule download_sequences:
         metadata = f"{config['paths']['metadata_dir']}/SraRunInfo_{organism_safe}.csv"
     output:
         touch(f"{config['paths']['sequences_dir']}/download_log.csv")
-    container:
-        "wgs_pipeline:latest"
     shell:
          """
         mkdir -p {config[paths][sequences_dir]}
