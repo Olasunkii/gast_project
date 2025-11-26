@@ -28,10 +28,8 @@ rule all:
     input:
         f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
         f"{SEQ_DIR}/download_log.csv",
-        expand(f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_1.fastq.gz", sample=get_sample_ids),
-        expand(f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_2.fastq.gz", sample=get_sample_ids),
-        expand(f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_1_val_1.fq.gz", sample=get_sample_ids),
-        expand(f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_2_val_2.fq.gz", sample=get_sample_ids),
+        expand(f"{RESULTS_DIR}/fastqc/{{sample}}/{{sample}}_1_val_1_fastqc.zip", sample=get_sample_ids),
+        expand(f"{RESULTS_DIR}/fastqc/{{sample}}/{{sample}}_2_val_2_fastqc.zip", sample=get_sample_ids),
 
 # -------------------------------------------------------
 # Rule: fetch_metadata — downloads SraRunInfo file
@@ -102,3 +100,22 @@ rule trim_galore:
         """
         trim_galore --paired --gzip -o {RESULTS_DIR}/trim_galore/{wildcards.sample} {input.r1} {input.r2}
         """
+# -------------------------------------------------------
+# Rule: fastqc — quality of sequences
+# -------------------------------------------------------
+rule fastqc:
+    input:
+        R1 = f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_1_val_1.fq.gz",
+        R2 = f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_2_val_2.fq.gz"
+    output:
+        html1 = f"{RESULTS_DIR}/fastqc/{{sample}}/{{sample}}_1_val_1_fastqc.html",
+        zip1  = f"{RESULTS_DIR}/fastqc/{{sample}}/{{sample}}_1_val_1_fastqc.zip",
+        html2 = f"{RESULTS_DIR}/fastqc/{{sample}}/{{sample}}_2_val_2_fastqc.html",
+        zip2  = f"{RESULTS_DIR}/fastqc/{{sample}}/{{sample}}_2_val_2_fastqc.zip"
+    conda:
+        "envs/environment_qc.yaml"
+    shell:
+        "fastqc {input.R1} {input.R2} -o {RESULTS_DIR}/fastqc/{wildcards.sample}"
+# -------------------------------------------------------
+# Rule: unicycler — assembly to draft genome
+# -------------------------------------------------------
