@@ -377,19 +377,16 @@ class SRAExtractor:
             result = pd.concat(frames, ignore_index=True)
             return result.head(retmax)
         return pd.DataFrame()#if no paired end is found
-    
-    def search_biosample_resistant(self, organism: str, retmax: int) -> list:
-        """This function looks for BioSamples that are from the corresponding organism 
-            and contains a antibiogram table. 
-            Return: id list of BioSample only numeric part of the id"""
-        term = f'{organism}[Organism] AND antibiogram[filter]'
-        h = Entrez.esearch(db="biosample", term=term, retmax=retmax)
-        r = Entrez.read(h)
-        return r.get("IdList", [])
 
-    def biosample_to_sra(self, biosample_ids: list) -> list:
-        """This function links the found biosample ids to a SRA run identifiers"""
+    def fetch_sra_ids_with_antibiogram(self, organism: str, retmax: int, start: int = 0) -> list:
+        """This function looks for BioSamples that are from the corresponding organism 
+            and contains a antibiogram table. And links the found biosample ids to a SRA run identifiers"""
+        term = f'{organism}[Organism] AND antibiogram[filter]'
+        h = Entrez.esearch(db="biosample", term=term, retstart=start, retmax=retmax)
+        r = Entrez.read(h)
+        biosample_ids =r.get("IdList", [])
         sra_ids = []
+        #link biosample to sra run id
         for bid in biosample_ids:
             try:
                 link = Entrez.elink(dbfrom="biosample", db="sra", id=bid)
@@ -402,7 +399,7 @@ class SRAExtractor:
                         sra_ids.append(link_item["Id"])
         return sra_ids
 
-    def fetch_sra_paired(self, sra_ids: list) -> pd.DataFrame:
+    def fetch_sra_metadata(self, sra_ids: list) -> pd.DataFrame:
         import io
         df = pd.DataFrame()
         if not sra_ids:
@@ -416,44 +413,58 @@ class SRAExtractor:
         return df
 
     def fetch_antibiogram(self, biosample_id: str) -> pd.DataFrame:
+        """this function takes a biosample id as parameter and
+          transforms the antibiogram xml to a pandas dataframe."""
         if not biosample_id:
             return None
-
         try:
+            #look up data corresponding to biosample id
             h = Entrez.efetch(db="biosample", id=biosample_id, rettype="xml")
             data = h.read()
             root = ET.fromstring(data)
         except:
             return None
 
-        table = root.find(".//Table")
+        table = root.find(".//Table")#find <table> xml
         if table is None:
-            return pd.DataFrame()#no existing antibiogram table?
+            return pd.DataFrame()#no existing antibiogram table then
         #transform xml to pandas dataframe
         header_cells = table.find("Header").findall("Cell")
-        columns = [cell.text for cell in header_cells]
+        columns = [cell.text for cell in header_cells]#header cells = column headers
         rows = []
         for row in table.find("Body").findall("Row"):
             cells = [cell.text if cell.text is not None else "" for cell in row.findall("Cell")]
             rows.append(cells)
-        return pd.DataFrame(rows, columns=columns)# to pandas table
+        return pd.DataFrame(rows, columns=columns)# to pandas dataframe
 
-    def resistant_paired_metadata(self, organism: str, retmax: int) -> pd.DataFrame:
-        biosample_ids = self.search_biosample_resistant(organism, retmax)
-        sra_ids = self.biosample_to_sra(biosample_ids)
-        df = self.fetch_sra_paired(sra_ids)
+    def collect_resistant_metadata(self, organism: str, retmax: int, batchsize_: int = 20) -> pd.DataFrame:
+        """This function looks searches for biosample with antibiogram and the stated organism.
+            Then it converts the found biosample ids to sra ids and collect the metadata.
+            The antibiogram is saved in another folder."""
+        collected_metadata = []
+        start = 0
+        batch_size = batchsize_
 
-        if df.empty:
-            return df
-        for biosample in df["BioSample"]:
-            ast = self.fetch_antibiogram(biosample)
-            if not ast.empty:
-                out_file = self.ast_dir / f"{biosample}.csv"
+        while len(collected_metadata) < retmax:
+            sra_ids = self.fetch_sra_ids_with_antibiogram(organism, retmax, start)
+            metadata_df = self.fetch_sra_metadata(sra_ids)#this can contain multiple samples
+            for biosample_id in metadata_df["BioSample"]:
+                ast = self.fetch_antibiogram(biosample_id)
+                if ast.empty:
+                    continue #if no antibiogram, move on to next sample
+                out_file = self.ast_dir / f"{biosample_id}.csv"
                 ast.to_csv(out_file, index=False)
-                print(f"[INFO] AST table saved to {out_file} for sample {biosample}")
+                print(f"[INFO] AST table saved to {out_file} for sample {biosample_id}")
+                #add only the corresponding metadata
+                row = metadata_df[metadata_df["BioSample"] == biosample_id]
+                collected_metadata.append(row)
 
-        return df
+            start += batch_size#retrieve next batch of records
 
+        if not collected_metadata:
+            return pd.DataFrame()
+
+        return pd.concat(collected_metadata, ignore_index=True)
 
 #######################################################
 # Optional CLI entry point
@@ -474,9 +485,9 @@ if __name__ == "__main__":
     ex = SRAExtractor(email=args.email)
     organism = args.organism or input("Enter organism name: ")
     # any sequence:fetch_runinfo(); only paired:fetch_runinfo_paired();known AST sequences:resistant_paired_metadata
-    df = ex.resistant_paired_metadata(organism, args.retmax)
+    df = ex.collect_resistant_metadata(organism, args.retmax)
     fname = f"SraRunInfo_{organism.replace(' ', '_')}.csv"
-    ex.save_metadata(df, fname)
+    ex.save_metadata(df, fname)#save metadata to csv file: data/metadata
     ex.preview_metadata(fname, n=5)
 
     if args.download or input("Download sequences? (y/n): ").lower() in ("y", "yes"):

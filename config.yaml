@@ -6,3 +6,4 @@ retmax: 3
 paths:
   metadata_dir: "data/metadata"
   sequences_dir: "data/sequences"
+  ast_dir: "data/ast"
