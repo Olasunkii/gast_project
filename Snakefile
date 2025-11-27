@@ -1,27 +1,54 @@
-# Snakefile
+# ===============================
+# Snakefile (fixed + automated)
+# ===============================
+
 configfile: "config.yaml"
 
+metadata_dir = config["paths"]["metadata_dir"]
+seq_dir      = config["paths"]["sequences_dir"]
+organism_tag = config["organism"].replace(" ", "_")
+
+
 # -------------------------------------------------------
-# Rule: all — defines the final expected output(s)
+# FINAL OUTPUTS
 # -------------------------------------------------------
 rule all:
     input:
-        f"{config['paths']['metadata_dir']}/SraRunInfo_{config['organism'].replace(' ', '_')}.csv",
-        f"{config['paths']['sequences_dir']}/download_log.csv"
+        f"{metadata_dir}/SraRunInfo_{organism_tag}.csv",
+        f"{seq_dir}/download_log.csv"
+
 
 # -------------------------------------------------------
-# Rule: download_sequences — downloads FASTQ files
+# RULE 1 — AUTO-GENERATE METADATA
 # -------------------------------------------------------
-rule download_sequences:
-    input:
-        metadata = f"{config['paths']['metadata_dir']}/SraRunInfo_{config['organism'].replace(' ', '_')}.csv"
+rule fetch_metadata:
     output:
-        touch(f"{config['paths']['sequences_dir']}/download_log.csv")
+        f"{metadata_dir}/SraRunInfo_{organism_tag}.csv"
     container:
         "wgs_pipeline:latest"
     shell:
-         """
-        mkdir -p {config[paths][sequences_dir]}
+        """
+        mkdir -p {metadata_dir}
+        python3 /app/scripts/sra_extractor.py \
+            --email {config[email]} \
+            --organism "{config[organism]}" \
+            --retmax {config[retmax]}
+        """
+
+
+# -------------------------------------------------------
+# RULE 2 — DOWNLOAD ALL FASTQ FILES
+# -------------------------------------------------------
+rule download_sequences:
+    input:
+        metadata = f"{metadata_dir}/SraRunInfo_{organism_tag}.csv"
+    output:
+        touch(f"{seq_dir}/download_log.csv")
+    container:
+        "wgs_pipeline:latest"
+    shell:
+        """
+        mkdir -p {seq_dir}
         python3 /app/scripts/sra_extractor.py \
             --email {config[email]} \
             --organism "{config[organism]}" \
