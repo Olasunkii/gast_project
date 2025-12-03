@@ -6,7 +6,7 @@ METADATA_DIR = config['paths']['metadata_dir']
 SEQ_DIR = config['paths']['sequences_dir']
 AST_DIR = config['paths']['ast_dir']
 RESULTS_DIR = config['paths']['results_dir']
-db_DIR = config['paths']['reference_db_dir']
+DB_DIR = config['paths']['reference_db_dir']
 
 # -------------------------------------------------------
 # Function: load sample names dynamically after metadata exists
@@ -29,10 +29,13 @@ rule all:
     input:
         f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
         f"{SEQ_DIR}/download_log.csv",
+        expand(f"{RESULTS_DIR}/fastqc/{{sample}}/{{sample}}_1_val_1_fastqc.html", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/checkm/{{sample}}", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/bakta/{{sample}}/{{sample}}.fna", sample=get_sample_ids),
-        expand(f"{RESULTS_DIR}/amrfinder/{{sample}}/{{sample}}_amrfinder.tsv", sample=get_sample_ids)
-
+        expand(f"{RESULTS_DIR}/amrfinder/{{sample}}.tsv", sample=get_sample_ids),
+        expand(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sam",sample=get_sample_ids),
+        f"{RESULTS_DIR}/sequence_coverage/summary_depth_table.tsv"
+        # f"{RESULTS_DIR}/integrated_data.csv"
 # -------------------------------------------------------
 # Rule: fetch_metadata — downloads SraRunInfo file
 # -------------------------------------------------------
@@ -133,6 +136,72 @@ rule unicycler_assembly:
     shell:
         "unicycler -1 {input.r1} -2 {input.r2} -o {RESULTS_DIR}/assembly/{wildcards.sample} -t {threads}"
 # -------------------------------------------------------
+# Rule: bwa-mem — aligning reads to draft genome
+# -------------------------------------------------------
+rule bwa_index:
+    input:
+        ref = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta"
+    output:
+        amb = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.amb",
+        ann = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.ann",
+        bwt = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.bwt",
+        pac = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.pac",
+        sa  = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.sa"
+    shell:
+        "bwa index {input.ref}"
+
+rule bwa_mem:
+    input:
+        ref = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",
+        amb = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.amb",
+        ann = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.ann",
+        bwt = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.bwt",
+        pac = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.pac",
+        sa  = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.sa",
+        r1  = f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_1_val_1.fq.gz",
+        r2  = f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_2_val_2.fq.gz"
+    output:
+        temp(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sam")
+    conda:
+        "envs/environment_wgs_depth.yaml"
+    threads: 8
+    shell:
+        """
+        bwa mem -t {threads} {input.ref} {input.r1} {input.r2} > {output}
+        """
+
+rule sam_to_depth:
+    input:
+        sam = f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sam"
+    output:
+        bam = temp(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sorted.bam"),
+        bai = temp(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sorted.bam.bai"),
+        depth = temp(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.depth.txt")
+    conda:
+        "envs/environment_wgs_depth.yaml"
+    threads: 4
+    shell:
+        """
+        samtools view -bS {input.sam} \
+        | samtools sort -@ {threads} -o {output.bam}
+        samtools index {output.bam}
+        samtools depth -a {output.bam} > {output.depth}
+        """
+# -------------------------------------------------------
+# Rule: summarizing sequence depth coverage
+# -------------------------------------------------------
+rule summarize_depth:
+    input:
+        expand(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.depth.txt",sample=get_sample_ids),
+    output:
+        f"{RESULTS_DIR}/sequence_coverage/summary_depth_table.tsv"
+    conda:
+        "envs/environment_wgs_depth.yaml"
+    shell:
+        """
+        python src/depth_summary.py {input} > {output}
+        """
+# -------------------------------------------------------
 # Rule: Checkm2 — Analyze contamination on draft genome
 # -------------------------------------------------------
 rule checkm:
@@ -144,7 +213,7 @@ rule checkm:
         "envs/environment_checkm.yaml"
     threads: 16
     params:
-        db=f"{db_DIR}/checkm2_db/uniref100.KO.1.dmnd"
+        db=f"{DB_DIR}/checkm2_db/uniref100.KO.1.dmnd"
     shell:
         """
         checkm2 predict --input {input} --output-directory {output} \
@@ -162,7 +231,7 @@ rule bakta:
         "envs/environment_bakta.yaml"
     threads: 16
     params:
-        db = f"{db_DIR}/bakta_db"
+        db = f"{DB_DIR}/bakta_db"
     shell:
         """
         rm -rf results/bakta/{wildcards.sample}
@@ -190,16 +259,30 @@ rule amrfinder:
         fasta = f"{RESULTS_DIR}/bakta/{{sample}}/{{sample}}.fna",
         db_updated = "amrfinder_db_ready.txt"
     output:
-        out = f"{RESULTS_DIR}/amrfinder/{{sample}}/{{sample}}_amrfinder.tsv"
+        out = f"{RESULTS_DIR}/amrfinder/{{sample}}.tsv"
     conda:
         "envs/environment_amr.yaml"
     threads: 8
     shell:
         """
-        mkdir -p {RESULTS_DIR}/amrfinder/{wildcards.sample}
         amrfinder --nucleotide {input.fasta} --annotation_format bakta \
                   --plus \
                   --organism Klebsiella_pneumoniae \
                   --output {output.out} \
                   --threads {threads}
         """
+# -------------------------------------------------------
+# Rule: genotypic and phenotypic integration
+# -------------------------------------------------------
+# rule integration:
+#     input:
+#         seq_dir = f"{SEQ_DIR}",
+#         metadata_file = f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
+#         ast_dir= f"{AST_DIR}",
+#         assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids)
+#     output:
+#         f"{RESULTS_DIR}/integrated_data.csv"
+#     shell:
+#         """
+#         python src/integration_geno_pheno.py {input.seq_dir} {input.metadata_file} {input.ast_dir} {input.assembly_dir} {output}
+#         """

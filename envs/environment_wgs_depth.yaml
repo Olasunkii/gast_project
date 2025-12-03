@@ -1,0 +1,9 @@
+name: wgs_depth
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - bwa
+  - samtools
+  - python
+  - snakemake
