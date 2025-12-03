@@ -1,63 +1,71 @@
 import pandas as pd
-import sys
 from pathlib import Path
+import sys
 
-class integration():
-    def __init__(self, sequence_folder, metadata_path):
-        self.sequence_folder_path = sequence_folder
-        self.metadata_folder_path = metadata_path
-    
-    def integrate(self):
-        df_metadata = pd.read_csv(self.metadata_folder_path)
-        df_merged_ast = self.integrate_ast(df_metadata)
-        df_integrated = self.integrate_sequences(df_merged_ast)
-        print("Writing to:", output_file)
-        df_integrated.to_csv(output_file, index=False)
+class Integration:
+    def __init__(self, seq_dir, metadata_file, ast_dir, assembly_paths, output):
+        self.seq_dir = Path(seq_dir)
+        self.metadata_file = Path(metadata_file)
+        self.ast_dir = Path(ast_dir)
 
-    def integrate_ast(self, df):
+        # sample ID is the parent directory name of assembly.fasta ;map sample based on directory structure
+        self.assembly_map = {Path(p).parent.name: Path(p) for p in assembly_paths}
+        self.output = Path(output)
+
+    def run(self):
+        meta = pd.read_csv(self.metadata_file)
+        meta = self.add_ast(meta)
+        meta = self.add_sequences(meta)
+        meta.to_csv(self.output, index=False)
+
+    def add_ast(self, df):
+        """This function will transform the corresponding antibiogram table to a pandas dataframe.
+            And then merge it to the metadata dataframe based on biosample id"""
+        # collect flattened AST rows
         rows = []
-        for csv_file_name in Path(ast_folder_path).glob("*.csv"):
-            ast_df = pd.read_csv(csv_file_name)
-            sample = csv_file_name.stem #get only the biosample id based on filename
-            ast_df = ast_df.set_index("Antibiotic") # set index on antibiotic column
-
-            # flatten by turning each col row into a key:value
+        for csv_path in self.ast_dir.glob("*.csv"):
+            sample = csv_path.stem# sample ID from filename stem
+            ast = pd.read_csv(csv_path).set_index("Antibiotic")    
+            # flatten table: antibiotic_measurement to value/method/etc.
             flat = {}
-            for antibiotic, row in ast_df.iterrows():
+            for antibiotic, row in ast.iterrows():
                 for col, val in row.items():
-                    new_key = f"{antibiotic}_{col}"
-                    flat[new_key] = val
-            rows.append({"sample": sample, **flat})
+                    flat[f"{antibiotic}_{col}"] = val
 
-        ast_df_all = pd.DataFrame(rows)#this merges all antibiotic columns; if no existing key then value is set to NAN
-        merged = df.merge(ast_df_all,left_on="BioSample",right_on="sample",how="left")
+            rows.append({"sample": sample, **flat})
+        ast_all = pd.DataFrame(rows)
+        merged = df.merge(ast_all, left_on="BioSample", right_on="sample", how="left")
         return merged
 
-    def integrate_sequences(self, df_metadata):
-        list_seq_Id= df_metadata["Run"].values
-        for sequence_id in list_seq_Id:
-            filepath = assembly_folder_path
-            with open(filepath) as f:
-                data = f.read()
-                cleaned_data = self.remove_headers(data)
-    
-            df_metadata.loc[df_metadata["Run"] == sequence_id, "Assembled_seq"] = cleaned_data
-        return df_metadata
-
-    def remove_headers(self,sequence_data):
-        clean_lines = []
-        for line in sequence_data.splitlines():
-            if line.startswith(">"):
+    def add_sequences(self, df):
+        """This function add its raw assembled draft genome to the metadata table under oclumn Assembled_seq"""
+        # loop over assembly fasta paths mapped by sample
+        for sample, fasta_path in self.assembly_map.items():
+            if sample not in df["Run"].values:
                 continue
-            clean_lines.append(line)
-        clean_data = "\n".join(clean_lines)
-        return clean_data
-#collect all parameters
-seq_folder_path=sys.argv[1]
-metadata_folder_path=sys.argv[2]
-ast_folder_path=sys.argv[3]
-assembly_folder_path=sys.argv[4]
-output_file= sys.argv[5]
-#start integration of phenotypic and genotype information into one
-integration_model = integration(seq_folder_path, metadata_folder_path)
-integration_model.integrate()
+            with open(fasta_path) as f:
+                seq = self._strip_headers(f.read())#strip headers for each contig
+            df.loc[df["Run"] == sample, "Assembled_seq"] = seq#seq contains raw DNA sequence
+
+        return df
+
+    def _strip_headers(self, data):
+        """this funciton removes all FASTA header lines"""
+        return "\n".join([l for l in data.splitlines() if not l.startswith(">")])
+
+
+seq_dir = sys.argv[1]
+metadata_file = sys.argv[2]
+ast_dir = sys.argv[3]
+assembly_paths = sys.argv[4].split()  # Snakemake passes space-separated list
+output = sys.argv[5]
+
+print("ARGS:", sys.argv)
+print("seq_dir:", seq_dir)
+print("metadata_file:", metadata_file)
+print("ast_dir:", ast_dir)
+print("assembly_paths:", assembly_paths)
+print("output:", output)
+
+
+Integration(seq_dir, metadata_file, ast_dir, assembly_paths, output).run()

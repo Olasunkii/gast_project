@@ -34,8 +34,9 @@ rule all:
         expand(f"{RESULTS_DIR}/bakta/{{sample}}/{{sample}}.fna", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/amrfinder/{{sample}}.tsv", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sam",sample=get_sample_ids),
-        f"{RESULTS_DIR}/sequence_coverage/summary_depth_table.tsv"
-        # f"{RESULTS_DIR}/integrated_data.csv"
+        expand(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.depth.txt",sample=get_sample_ids),
+        f"{RESULTS_DIR}/sequence_coverage/summary_depth_table.tsv",
+        f"{RESULTS_DIR}/integrated_data.csv"
 # -------------------------------------------------------
 # Rule: fetch_metadata — downloads SraRunInfo file
 # -------------------------------------------------------
@@ -176,7 +177,7 @@ rule sam_to_depth:
     output:
         bam = temp(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sorted.bam"),
         bai = temp(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sorted.bam.bai"),
-        depth = temp(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.depth.txt")
+        depth = f"{RESULTS_DIR}/sequence_coverage/{{sample}}.depth.txt"
     conda:
         "envs/environment_wgs_depth.yaml"
     threads: 4
@@ -274,15 +275,15 @@ rule amrfinder:
 # -------------------------------------------------------
 # Rule: genotypic and phenotypic integration
 # -------------------------------------------------------
-# rule integration:
-#     input:
-#         seq_dir = f"{SEQ_DIR}",
-#         metadata_file = f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
-#         ast_dir= f"{AST_DIR}",
-#         assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids)
-#     output:
-#         f"{RESULTS_DIR}/integrated_data.csv"
-#     shell:
-#         """
-#         python src/integration_geno_pheno.py {input.seq_dir} {input.metadata_file} {input.ast_dir} {input.assembly_dir} {output}
-#         """
+rule integration:
+    input:
+        seq_dir = f"{SEQ_DIR}",
+        metadata_file = f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
+        ast_dir= f"{AST_DIR}",
+        assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids)
+    output:
+        f"{RESULTS_DIR}/integrated_data.csv"
+    shell:
+        """
+        python src/integration_geno_pheno.py {input.seq_dir} {input.metadata_file} {input.ast_dir} "{input.assembly_dir}" {output}
+        """
