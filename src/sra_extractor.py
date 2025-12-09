@@ -42,9 +42,11 @@ class SRAExtractor:
         self.data_meta = self.project_root / "data" / "metadata"
         self.data_seq = self.project_root / "data" / "sequences"
         self.ast_dir= self.project_root / "data" / "ast"
+        self.host_metadata_dir= self.project_root / "data" / "host_metadata"
         self.data_meta.mkdir(parents=True, exist_ok=True)
         self.data_seq.mkdir(parents=True, exist_ok=True)
         self.ast_dir.mkdir(parents=True, exist_ok=True)
+        self.host_metadata_dir.mkdir(parents=True, exist_ok=True)
 
         self.default_retmax = default_retmax
         self.sleep_between_requests = sleep_between_requests
@@ -62,6 +64,7 @@ class SRAExtractor:
         print(f"Metadata folder: {self.data_meta}")
         print(f"Sequences folder: {self.data_seq}")
         print(f"Antimicrobial susceptibility testing (AST) folder: {self.ast_dir}")
+        print(f"Host metadata folder: {self.host_metadata_dir}")
 
     #######################################################
     # Metadata fetching
@@ -376,8 +379,7 @@ class SRAExtractor:
         return df
 
     def fetch_antibiogram(self, biosample_id: str) -> pd.DataFrame:
-        """this function takes a biosample id as parameter and
-          transforms the antibiogram xml to a pandas dataframe."""
+        """Transforms antibiogram table to pandas dataframe based on biosample id"""
         if not biosample_id:
             return None
         try:
@@ -400,13 +402,40 @@ class SRAExtractor:
             rows.append(cells)
         return pd.DataFrame(rows, columns=columns)# to pandas dataframe
 
+    def fetch_host_metadata(self, biosample_id: str) -> dict:
+        """retrieves host metadata based on biosample. Returns a dataframe"""
+        if not biosample_id:
+            return None
+        try:
+            h = Entrez.efetch(db="biosample", id=biosample_id, rettype="xml")
+            data = h.read()
+            root = ET.fromstring(data)
+        except:
+            return None
+
+        host_metadata = {}
+        attrs = root.findall(".//Attributes/Attribute")# extract all Attribute elements
+
+        for attr in attrs:
+            name = (
+                attr.get("display_name")
+                or attr.get("attribute_name")
+                or attr.get("harmonized_name")
+            )
+            if not name:
+                continue
+            value = attr.text or ""
+            host_metadata[name] = value
+        return  pd.DataFrame([host_metadata])
+
     def collect_resistant_metadata(self, organism: str, retmax: int, batchsize_: int = 20) -> pd.DataFrame:
-        """This function looks searches for biosample with antibiogram and the stated organism.
-            Then it converts the found biosample ids to sra ids and collect the metadata.
+        """Searches for biosample with antibiogram and the stated organism.
+            Then converts the found biosample ids to sra ids and collect the sample and host metadata.
             The antibiogram is saved in another folder."""
         collected_metadata = []
         start = 0
         batch_size = batchsize_
+        collected_host_metadata = []  # accumulate here
 
         while len(collected_metadata) < retmax:
             sra_ids = self.fetch_sra_ids_with_antibiogram(organism, retmax, start)
@@ -415,6 +444,13 @@ class SRAExtractor:
                 ast = self.fetch_antibiogram(biosample_id)
                 if ast.empty:
                     continue #if no antibiogram, move on to next sample
+
+                #save host metadata
+                host_metadata = self.fetch_host_metadata(biosample_id)
+                #collect host metadata and add biosample column
+                collected_host_metadata.append(host_metadata.assign(BioSample=biosample_id))
+                                               
+                #save antibiogram table (ast)
                 out_file = self.ast_dir / f"{biosample_id}.csv"
                 ast.to_csv(out_file, index=False)
                 print(f"[INFO] AST table saved to {out_file} for sample {biosample_id}")
@@ -426,6 +462,11 @@ class SRAExtractor:
 
         if not collected_metadata:
             return pd.DataFrame()
+    
+        if collected_host_metadata:
+            host_df = pd.concat(collected_host_metadata, ignore_index=True)
+            out_file = self.host_metadata_dir / "host_metadata_all.csv"
+            host_df.to_csv(out_file, index=False)
 
         return pd.concat(collected_metadata, ignore_index=True)
 
