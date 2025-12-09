@@ -18,6 +18,7 @@ import pandas as pd
 from Bio import Entrez
 from tqdm import tqdm
 import xml.etree.ElementTree as ET
+import io
 
 # Helper: run command and raise with readable error
 def run_cmd(cmd, **kwargs):
@@ -344,8 +345,8 @@ class SRAExtractor:
 
         print("[INFO] All downloads completed.")
 
-    def fetch_sra_ids_with_antibiogram(self, organism: str, retmax: int, start: int = 0) -> list:
-        """This function looks for BioSamples that are from the corresponding organism 
+    def find_sra_ids_with_antibiogram(self, organism: str, retmax: int, start: int = 0) -> list:
+        """Searches for BioSamples that are from the corresponding organism 
             and contains a antibiogram table. And links the found biosample ids to a SRA run identifiers"""
         term = f'{organism}[Organism] AND antibiogram[filter]'
         h = Entrez.esearch(db="biosample", term=term, retstart=start, retmax=retmax)
@@ -366,7 +367,7 @@ class SRAExtractor:
         return sra_ids
 
     def fetch_sra_metadata(self, sra_ids: list) -> pd.DataFrame:
-        import io
+        """retrieves sra metadata based on sra_ids list. Returns a dataframe only containing paired sequences."""
         df = pd.DataFrame()
         if not sra_ids:
             return df
@@ -378,44 +379,34 @@ class SRAExtractor:
         df = df[df["LibraryLayout"] == "PAIRED"]#only paired sequences
         return df
 
-    def fetch_antibiogram(self, biosample_id: str) -> pd.DataFrame:
-        """Transforms antibiogram table to pandas dataframe based on biosample id"""
+    def fetch_antibiogram_and_host(self, biosample_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Fetches BioSample XML once, extracts antibiogram table and host metadata, returns two dataframes."""
         if not biosample_id:
-            return None
+            return pd.DataFrame(), pd.DataFrame()
+
         try:
-            #look up data corresponding to biosample id
             h = Entrez.efetch(db="biosample", id=biosample_id, rettype="xml")
             data = h.read()
             root = ET.fromstring(data)
         except:
-            return None
+            return pd.DataFrame(), pd.DataFrame()
 
-        table = root.find(".//Table")#find <table> xml
+        # extract antibiogram
+        table = root.find(".//Table")
         if table is None:
-            return pd.DataFrame()#no existing antibiogram table then
-        #transform xml to pandas dataframe
-        header_cells = table.find("Header").findall("Cell")
-        columns = [cell.text for cell in header_cells]#header cells = column headers
-        rows = []
-        for row in table.find("Body").findall("Row"):
-            cells = [cell.text if cell.text is not None else "" for cell in row.findall("Cell")]
-            rows.append(cells)
-        return pd.DataFrame(rows, columns=columns)# to pandas dataframe
+            antibiogram_df = pd.DataFrame()
+        else:
+            header = table.find("Header").findall("Cell")
+            columns = [c.text for c in header]
+            rows = []
+            for row in table.find("Body").findall("Row"):
+                cells = [cell.text or "" for cell in row.findall("Cell")]
+                rows.append(cells)
+            antibiogram_df = pd.DataFrame(rows, columns=columns)
 
-    def fetch_host_metadata(self, biosample_id: str) -> dict:
-        """retrieves host metadata based on biosample. Returns a dataframe"""
-        if not biosample_id:
-            return None
-        try:
-            h = Entrez.efetch(db="biosample", id=biosample_id, rettype="xml")
-            data = h.read()
-            root = ET.fromstring(data)
-        except:
-            return None
-
-        host_metadata = {}
-        attrs = root.findall(".//Attributes/Attribute")# extract all Attribute elements
-
+        # extract host metadata
+        attrs = root.findall(".//Attributes/Attribute")
+        host = {}
         for attr in attrs:
             name = (
                 attr.get("display_name")
@@ -424,51 +415,54 @@ class SRAExtractor:
             )
             if not name:
                 continue
-            value = attr.text or ""
-            host_metadata[name] = value
-        return  pd.DataFrame([host_metadata])
+            host[name] = attr.text or ""
+
+        host_df = pd.DataFrame([host])
+
+        return antibiogram_df, host_df
+
 
     def collect_resistant_metadata(self, organism: str, retmax: int, batchsize_: int = 20) -> pd.DataFrame:
-        """Searches for biosample with antibiogram and the stated organism.
-            Then converts the found biosample ids to sra ids and collect the sample and host metadata.
-            The antibiogram is saved in another folder."""
+        """Keep searching SRA id, antibiogram filtering, host-metadata aggregation.
+            Until retmax number has been reached and then saves sample and host metadata."""
         collected_metadata = []
+        collected_host_metadata = []
         start = 0
-        batch_size = batchsize_
-        collected_host_metadata = []  # accumulate here
 
         while len(collected_metadata) < retmax:
-            sra_ids = self.fetch_sra_ids_with_antibiogram(organism, retmax, start)
-            metadata_df = self.fetch_sra_metadata(sra_ids)#this can contain multiple samples
-            for biosample_id in metadata_df["BioSample"]:
-                ast = self.fetch_antibiogram(biosample_id)
-                if ast.empty:
-                    continue #if no antibiogram, move on to next sample
+            sra_ids = self.find_sra_ids_with_antibiogram(organism, retmax, start)
+            sample_metadata_df = self.fetch_sra_metadata(sra_ids)
+            self._save_batch(sample_metadata_df, collected_metadata, collected_host_metadata)
+            start += batchsize_#move to next batch
 
-                #save host metadata
-                host_metadata = self.fetch_host_metadata(biosample_id)
-                #collect host metadata and add biosample column
-                collected_host_metadata.append(host_metadata.assign(BioSample=biosample_id))
-                                               
-                #save antibiogram table (ast)
-                out_file = self.ast_dir / f"{biosample_id}.csv"
-                ast.to_csv(out_file, index=False)
-                print(f"[INFO] AST table saved to {out_file} for sample {biosample_id}")
-                #add only the corresponding metadata
-                row = metadata_df[metadata_df["BioSample"] == biosample_id]
-                collected_metadata.append(row)
+        return self._write_outputs(collected_metadata, collected_host_metadata)
 
-            start += batch_size#retrieve next batch of records
+    def _save_batch(self, metadata_df, collected_metadata, collected_host_metadata):
+        """Processes one sample metadata batch: saves only samples with antibiograms and corresponding host metadata."""
+        for biosample_id in metadata_df["BioSample"]:
 
+            ast, host = self.fetch_antibiogram_and_host(biosample_id)
+            if ast.empty:
+                continue
+
+            ast.to_csv(self.ast_dir / f"{biosample_id}.csv", index=False)
+
+            collected_host_metadata.append(host.assign(BioSample=biosample_id))
+
+            row = metadata_df[metadata_df["BioSample"] == biosample_id]
+            collected_metadata.append(row)
+
+    def _write_outputs(self, collected_metadata, collected_host_metadata):
+        """Combines all host metadata into one file and returns the combined sample metadata table."""
         if not collected_metadata:
             return pd.DataFrame()
-    
+
         if collected_host_metadata:
             host_df = pd.concat(collected_host_metadata, ignore_index=True)
-            out_file = self.host_metadata_dir / "host_metadata_all.csv"
-            host_df.to_csv(out_file, index=False)
+            host_df.to_csv(self.host_metadata_dir / "host_metadata_all.csv", index=False)
 
         return pd.concat(collected_metadata, ignore_index=True)
+
 
 #######################################################
 # Optional CLI entry point
