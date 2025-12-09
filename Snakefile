@@ -279,12 +279,13 @@ rule amrfinder:
 # -------------------------------------------------------
 rule integration:
     input:
-        metadata_file = f"{HOST_METADATA_DIR}/host_metadata_all.csv",
+        metadata_file = f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
+        host_metadata= f"{HOST_METADATA_DIR}/host_metadata_all.csv",
         assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids)
     output:
         f"{RESULTS_DIR}/integrated_data.csv"
     shell:
         """
-        python src/DataIntegrator.py {SEQ_DIR} {input.metadata_file} {AST_DIR} \
+        python src/DataIntegrator.py {SEQ_DIR} {input.metadata_file} {input.host_metadata} {AST_DIR} \
          "{input.assembly_dir}" {RESULTS_DIR}/amrfinder/ {output}
         """
