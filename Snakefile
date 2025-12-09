@@ -3,6 +3,7 @@ configfile: "config.yaml"
 # prepare safe organism name & config paths variables setup
 organism_safe = config['organism'].replace(' ', '_')
 METADATA_DIR = config['paths']['metadata_dir']
+HOST_METADATA_DIR = config['paths']['host_metadata_dir']
 SEQ_DIR = config['paths']['sequences_dir']
 AST_DIR = config['paths']['ast_dir']
 RESULTS_DIR = config['paths']['results_dir']
@@ -37,6 +38,7 @@ rule all:
         expand(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.depth.txt",sample=get_sample_ids),
         f"{RESULTS_DIR}/sequence_coverage/summary_depth_table.tsv",
         f"{RESULTS_DIR}/integrated_data.csv"
+
 # -------------------------------------------------------
 # Rule: fetch_metadata — downloads SraRunInfo file
 # -------------------------------------------------------
@@ -277,15 +279,12 @@ rule amrfinder:
 # -------------------------------------------------------
 rule integration:
     input:
-        seq_dir = f"{SEQ_DIR}",
-        metadata_file = f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
-        ast_dir= f"{AST_DIR}",
-        assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids),
-        amr_dir=f"{RESULTS_DIR}/amrfinder/"
+        metadata_file = f"{HOST_METADATA_DIR}/host_metadata_all.csv",
+        assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids)
     output:
         f"{RESULTS_DIR}/integrated_data.csv"
     shell:
         """
-        python src/DataIntegrator.py {input.seq_dir} {input.metadata_file} {input.ast_dir} \
-         "{input.assembly_dir}" {input.amr_dir} {output}
+        python src/DataIntegrator.py {SEQ_DIR} {input.metadata_file} {AST_DIR} \
+         "{input.assembly_dir}" {RESULTS_DIR}/amrfinder/ {output}
         """
