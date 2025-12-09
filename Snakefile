@@ -280,10 +280,12 @@ rule integration:
         seq_dir = f"{SEQ_DIR}",
         metadata_file = f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
         ast_dir= f"{AST_DIR}",
-        assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids)
+        assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids),
+        amr_dir=f"{RESULTS_DIR}/amrfinder/"
     output:
         f"{RESULTS_DIR}/integrated_data.csv"
     shell:
         """
-        python src/integration_geno_pheno.py {input.seq_dir} {input.metadata_file} {input.ast_dir} "{input.assembly_dir}" {output}
+        python src/DataIntegrator.py {input.seq_dir} {input.metadata_file} {input.ast_dir} \
+         "{input.assembly_dir}" {input.amr_dir} {output}
         """
