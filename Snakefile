@@ -34,10 +34,9 @@ rule all:
         expand(f"{RESULTS_DIR}/checkm/{{sample}}", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/bakta/{{sample}}/{{sample}}.fna", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/amrfinder/{{sample}}.tsv", sample=get_sample_ids),
-        expand(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sam",sample=get_sample_ids),
-        expand(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.depth.txt",sample=get_sample_ids),
-        f"{RESULTS_DIR}/sequence_coverage/summary_depth_table.tsv",
-        f"{RESULTS_DIR}/integrated_data.csv"
+        f"{RESULTS_DIR}/integrated_data.csv",
+        f"{RESULTS_DIR}/integrated_data_preprocessed.csv",
+        f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv"
 
 # -------------------------------------------------------
 # Rule: fetch_metadata — downloads SraRunInfo file
@@ -139,72 +138,6 @@ rule unicycler_assembly:
     shell:
         "unicycler -1 {input.r1} -2 {input.r2} -o {RESULTS_DIR}/assembly/{wildcards.sample} -t {threads}"
 # -------------------------------------------------------
-# Rule: bwa-mem — aligning reads to draft genome
-# -------------------------------------------------------
-rule bwa_index:
-    input:
-        ref = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta"
-    output:
-        amb = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.amb",
-        ann = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.ann",
-        bwt = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.bwt",
-        pac = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.pac",
-        sa  = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.sa"
-    shell:
-        "bwa index {input.ref}"
-
-rule bwa_mem:
-    input:
-        ref = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",
-        amb = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.amb",
-        ann = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.ann",
-        bwt = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.bwt",
-        pac = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.pac",
-        sa  = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta.sa",
-        r1  = f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_1_val_1.fq.gz",
-        r2  = f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_2_val_2.fq.gz"
-    output:
-        temp(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sam")
-    conda:
-        "envs/environment_wgs_depth.yaml"
-    threads: 8
-    shell:
-        """
-        bwa mem -t {threads} {input.ref} {input.r1} {input.r2} > {output}
-        """
-
-rule sam_to_depth:
-    input:
-        sam = f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sam"
-    output:
-        bam = temp(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sorted.bam"),
-        bai = temp(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.sorted.bam.bai"),
-        depth = f"{RESULTS_DIR}/sequence_coverage/{{sample}}.depth.txt"
-    conda:
-        "envs/environment_wgs_depth.yaml"
-    threads: 4
-    shell:
-        """
-        samtools view -bS {input.sam} \
-        | samtools sort -@ {threads} -o {output.bam}
-        samtools index {output.bam}
-        samtools depth -a {output.bam} > {output.depth}
-        """
-# -------------------------------------------------------
-# Rule: summarizing sequence depth coverage
-# -------------------------------------------------------
-rule summarize_depth:
-    input:
-        expand(f"{RESULTS_DIR}/sequence_coverage/{{sample}}.depth.txt",sample=get_sample_ids),
-    output:
-        f"{RESULTS_DIR}/sequence_coverage/summary_depth_table.tsv"
-    conda:
-        "envs/environment_wgs_depth.yaml"
-    shell:
-        """
-        python src/depth_summary.py {input} > {output}
-        """
-# -------------------------------------------------------
 # Rule: Checkm2 — Analyze contamination on draft genome
 # -------------------------------------------------------
 rule checkm:
@@ -275,17 +208,44 @@ rule amrfinder:
                   --threads {threads}
         """
 # -------------------------------------------------------
+# Rule: AMRFinderPlus — transforming annotation to gene present/absence
+# -------------------------------------------------------
+rule amrfinder_transformation:
+    input:
+        f"{RESULTS_DIR}/amrfinder/"
+    output:
+        f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv"
+    conda:
+        "envs/environment_amr.yaml"
+    shell:
+        """
+        python src/amr_transformer.py --amr_dir {input} --output {output}
+        """
+# -------------------------------------------------------
 # Rule: genotypic and phenotypic integration
 # -------------------------------------------------------
 rule integration:
     input:
         metadata_file = f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
         host_metadata= f"{HOST_METADATA_DIR}/host_metadata_all.csv",
-        assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids)
+        assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids),
+        amr_file= f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv"
     output:
         f"{RESULTS_DIR}/integrated_data.csv"
     shell:
         """
         python src/DataIntegrator.py {SEQ_DIR} {input.metadata_file} {input.host_metadata} {AST_DIR} \
-         "{input.assembly_dir}" {RESULTS_DIR}/amrfinder/ {output}
+         "{input.assembly_dir}" {input.amr_file} {output}
+        """
+# -------------------------------------------------------
+# Rule: preprocessing integrated data
+# -------------------------------------------------------
+rule preprocessing:
+    input:
+       f"{RESULTS_DIR}/integrated_data.csv",
+    output:
+        f"{RESULTS_DIR}/integrated_data_preprocessed.csv"
+    shell:
+        """
+        python src/ml_preprocessor.py --input {input} --config config.yaml --output {output}
         """

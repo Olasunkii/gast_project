@@ -1,6 +1,6 @@
 # config.yaml
 organism: "Klebsiella pneumoniae"
-email: "your@email.com"
+email: "yourExample@email.com"
 retmax: 2
 
 paths:
@@ -92,8 +92,10 @@ preprocessing:
       - "collection date"
       - "host subject id"
       - "sample"
+      - "organism_complex"
 
     contains:
       - "vendor"
       - "laboratory typing"
       - "testing standard"
+      - "_id"

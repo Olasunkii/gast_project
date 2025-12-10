@@ -8,7 +8,7 @@ class Integration:
         self.sample_metadata_file = Path(sample_metadata_file)
         self.host_metadata_file = Path(host_metadata_file)
         self.ast_dir = Path(ast_dir)
-        self.amr_dir= amr_dir
+        self.amr_file= amr_dir
         # sample ID is the folder parent directory name of assembly.fasta ;map sample based on directory structure
         self.assembly_map = {Path(p).parent.name: Path(p) for p in assembly_paths}
         self.output = Path(output)
@@ -60,28 +60,8 @@ class Integration:
             self.integrated_df.loc[self.integrated_df["Run"] == sample, "Assembled_seq"] = seq#seq contains raw DNA sequence
 
     def integrate_amr(self):
-        amr_df = self._transform_amr()
-        self.integrated_df = self.integrated_df.merge(amr_df, left_on="Run", right_on="run_id", how="left")
-
-    def _transform_amr(self):
-        """Transform AMR data into a single row structure suitable for merging by biosample_id."""
-        folder_path = Path(self.amr_dir)
-        rows = []
-        for amr_file in folder_path.glob("*.tsv"):
-            id_ = amr_file.stem  # retrieve run/sample identifier from file stem
-            df = pd.read_csv(amr_file, sep="\t") 
-            df.index = df.index + 1  # start row numbering at 1
-            record = {} 
-
-            for idx, amr_row in df.iterrows():
-                for col, val in amr_row.items():  # iterate over each column in row
-                    key = f"{col}_{idx}"  # construct unique column name
-                    record[key] = val  # assign AMR value under flattened name
-
-            record["run_id"] = id_  # add identifier
-            rows.append(record)  # collect record into result set
-
-        return pd.DataFrame(rows)
+        amr_gene_presence_df = pd.read_csv(self.amr_file)
+        self.integrated_df = self.integrated_df.merge(amr_gene_presence_df, left_on="Run", right_on="run_id", how="left")
 
     def _strip_headers(self, data):
         """Removing all FASTA header lines"""

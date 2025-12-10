@@ -62,6 +62,7 @@ class Preprocessor:
                 exclude_exact=enc.get("auto_one_hot_exclude_exact", []),
                 exclude_contains=enc.get("auto_one_hot_exclude_contains", []),
             )
+        self._encode_bool_cols()
 
     def _apply_encoding(self, *, column_substrings, mapping, normalize_lower):
         """Applies encoding by corresponding mapping defined in the config.yaml"""
@@ -78,7 +79,11 @@ class Preprocessor:
             if normalize_lower:
                 s = s.str.lower()
             self.df[col] = s.replace({"nan": None}).map(mapping)
-    
+
+    def _encode_bool_cols(self):
+        bool_cols = self.df.select_dtypes(include=["bool"]).columns.tolist()
+        self.df[bool_cols] = self.df[bool_cols].astype(int)
+
     def _split_latlon(self):
         """ Splits latitude and longitude to each a column including corresponding sign convention for direction"""
         col = self.config["preprocessing"]["location"]["latlon_column"]
@@ -164,8 +169,9 @@ class Preprocessor:
         """Encodes remaining categorical columns by one hot encoding them."""
         exclude_exact = set(exclude_exact or [])
         exclude_contains_lower = [s.lower() for s in (exclude_contains or [])]
-        obj_cols = self.df.select_dtypes(include=["object"]).columns # only object columns
-        # filter with exact and substring exclusion
+        obj_cols = self.df.select_dtypes(include=["object", "category"]).columns # only categorical columns
+        print(obj_cols)
+        # filter out columns that were manually encoded
         cat_cols = [
             c
             for c in obj_cols
@@ -174,6 +180,7 @@ class Preprocessor:
         ]
         if not cat_cols:#o remaining object columns
             return
+        print(cat_cols)
         # normalize NaN-like strings to numpy nan value
         for c in cat_cols:
             s = self.df[c].astype(str).str.strip()
@@ -183,7 +190,7 @@ class Preprocessor:
         self.df = pd.get_dummies(
             self.df,
             columns=cat_cols,
-            dummy_na=True,
+            dummy_na=False 
         )
 
 
