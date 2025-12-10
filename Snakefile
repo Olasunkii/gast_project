@@ -36,7 +36,8 @@ rule all:
         expand(f"{RESULTS_DIR}/amrfinder/{{sample}}.tsv", sample=get_sample_ids),
         f"{RESULTS_DIR}/integrated_data.csv",
         f"{RESULTS_DIR}/integrated_data_preprocessed.csv",
-        f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv"
+        f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv",
+        f"{RESULTS_DIR}/carbapenem_consistency_check.tsv"
 
 # -------------------------------------------------------
 # Rule: fetch_metadata — downloads SraRunInfo file
@@ -208,7 +209,7 @@ rule amrfinder:
                   --threads {threads}
         """
 # -------------------------------------------------------
-# Rule: AMRFinderPlus — transforming annotation to gene present/absence
+# Rule: Feature Extraction — transforming resistance genes to gene present/absence
 # -------------------------------------------------------
 rule amrfinder_transformation:
     input:
@@ -221,6 +222,19 @@ rule amrfinder_transformation:
         """
         python src/amr_transformer.py --amr_dir {input} --output {output}
         """
+# -------------------------------------------------------
+# Rule: Consistency check — phenotypic data vs EUCAST breaking points
+# -------------------------------------------------------
+rule check_carbapenems:
+    input:
+        AST_DIR
+    output:
+        f"{RESULTS_DIR}/carbapenem_consistency_check.tsv"
+    conda:
+        "envs/environment_amr.yaml"
+    shell:
+        "python src/ast_check_breaking_points.py {input} {output}"
+
 # -------------------------------------------------------
 # Rule: genotypic and phenotypic integration
 # -------------------------------------------------------

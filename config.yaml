@@ -1,6 +1,6 @@
 # config.yaml
 organism: "Klebsiella pneumoniae"
-email: "yourExample@email.com"
+email: "example@email.com"
 retmax: 2
 
 paths:
@@ -56,23 +56,29 @@ preprocessing:
         - "phenotype"
         - "resistance phenotype"
         - "_phen"
+      #https://www.eucast.org/bacteria/clinical-breakpoints-and-interpretation/definition-of-s-i-and-r/
+      eucast_phenotype_mapping: 
+        - "S": 0
+        - "I": 1
+        - "R": 2
       mapping:
+        "n": -1
+        "nd": -1
+        "not defined": -1
         "s": 0
         "sensitive": 0
         "susceptible": 0
         "i": 1
         "intermediate": 1
-        "ns": 2
-        "nonsusceptible": 2
-        "n": 3
-        "nd": 3
-        "not defined": 3
-        "r": 4
-        "resistant": 4
-        "hlar": 5
-        "high level aminoglycoside resistance": 5
-        "ssd": 6
-        "susceptible-dose dependent": 6
+        "ns": 1
+        "nonsusceptible": 1
+        "ssd": 1
+        "susceptible-dose dependent": 1
+        "r": 2
+        "resistant": 2
+        "hlar": 2
+        "high level aminoglycoside resistance": 2
+
   
     auto_one_hot_encode_rest: true
     auto_one_hot_exclude_exact:
