@@ -9,11 +9,12 @@ class Integration:
         self.host_metadata_file = Path(host_metadata_file)
         self.ast_dir = Path(ast_dir)
         self.amr_dir= amr_dir
-        # sample ID is the parent directory name of assembly.fasta ;map sample based on directory structure
+        # sample ID is the folder parent directory name of assembly.fasta ;map sample based on directory structure
         self.assembly_map = {Path(p).parent.name: Path(p) for p in assembly_paths}
         self.output = Path(output)
 
     def run(self):
+        """Integrates step-for-step host metadata, AST information, AMR resistance genes and draft genome."""
         base = pd.read_csv(self.sample_metadata_file)        
         self.integrated_df = base[["BioSample", "Run"]].copy() # Load only the columns required for merging
         print(self.integrated_df)

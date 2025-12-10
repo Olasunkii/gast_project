@@ -1,11 +1,99 @@
 # config.yaml
 organism: "Klebsiella pneumoniae"
 email: "your@email.com"
-retmax: 9
+retmax: 2
 
 paths:
   metadata_dir: "data/metadata"
+  host_metadata_dir: "data/host_metadata"
   sequences_dir: "data/sequences"
   ast_dir: "data/ast"
   results_dir: "results"
   reference_db_dir: "ref_db"
+
+#configuration for preprocessing columns
+preprocessing:
+  structural:
+    split_location: true
+    split_mic: true
+    split_latlon: true
+
+  location:
+    source_column: "geographic location"
+    target_columns: ["Country", "State/Province"]
+    latlon_column: "latitude and longitude"
+
+  mic_split:
+    column_contains:
+      - "measurement"
+    exclude_contains:
+      - "sign"
+      - "unit"
+  encoding:
+    encode_units: true
+    units:
+      units_column_contains:
+        - "units"        # substring to detect unit-columns
+      mapping:
+        "mg/l": 1
+        "mm": 2
+    
+    encode_comparison_signs: true
+    sign_column_contains:
+      - "measurement sign"
+      - "_sign"
+    comparison_signs:
+      "<":  -2
+      "<=": -1
+      "==": 0
+      "=":  0
+      ">=": 1
+      ">":  2
+
+    encode_phenotypes: true
+    phenotype:
+      phenotype_column_contains:
+        - "phenotype"
+        - "resistance phenotype"
+        - "_phen"
+      mapping:
+        "s": 0
+        "sensitive": 0
+        "susceptible": 0
+        "i": 1
+        "intermediate": 1
+        "ns": 2
+        "nonsusceptible": 2
+        "n": 3
+        "nd": 3
+        "not defined": 3
+        "r": 4
+        "resistant": 4
+        "hlar": 5
+        "high level aminoglycoside resistance": 5
+        "ssd": 6
+        "susceptible-dose dependent": 6
+  
+    auto_one_hot_encode_rest: true
+    auto_one_hot_exclude_exact:
+        - "Assembled_seq"
+    auto_one_hot_exclude_contains:
+      - "measurement sign"
+      - "measurement unit"
+      - "phenotype"
+      - "resistance phenotype"
+      - "_phen"
+  drop:
+    explicit:
+      - "BioSample"
+      - "Run"
+      - "isolate"
+      - "collected by"
+      - "collection date"
+      - "host subject id"
+      - "sample"
+
+    contains:
+      - "vendor"
+      - "laboratory typing"
+      - "testing standard"
