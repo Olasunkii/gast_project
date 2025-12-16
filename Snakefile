@@ -34,11 +34,16 @@ rule all:
         expand(f"{RESULTS_DIR}/checkm/{{sample}}", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/bakta/{{sample}}/{{sample}}.fna", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/amrfinder/{{sample}}.tsv", sample=get_sample_ids),
-        f"{RESULTS_DIR}/integrated_data.csv",
-        f"{RESULTS_DIR}/integrated_data_preprocessed.csv",
+        f"{RESULTS_DIR}/integrated_data/integrated_data.csv",
+        f"{RESULTS_DIR}/integrated_data/integrated_data_preprocessed.csv",
         f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv",
-        f"{RESULTS_DIR}/carbapenem_consistency_check.tsv"
-
+        f"{RESULTS_DIR}/carbapenem_consistency_check.tsv",
+        f"{RESULTS_DIR}/X_train.csv",
+        f"{RESULTS_DIR}/y_train.csv",
+        f"{RESULTS_DIR}/X_validation.csv",
+        f"{RESULTS_DIR}/y_validation.csv",
+        f"{RESULTS_DIR}/X_test.csv",
+        f"{RESULTS_DIR}/y_test.csv"
 # -------------------------------------------------------
 # Rule: fetch_metadata — downloads SraRunInfo file
 # -------------------------------------------------------
@@ -233,7 +238,20 @@ rule check_carbapenems:
     conda:
         "envs/environment_amr.yaml"
     shell:
-        "python src/ast_check_breaking_points.py --input {input} --config config.yaml --output {output}"
+        "python src/phenotype_checker.py --input {input} --config config.yaml --output {output}"
+# -------------------------------------------------------
+# Rule: Consistency check — Genome completion
+# -------------------------------------------------------
+rule check_genome:
+    input:
+        data=f"{RESULTS_DIR}/checkm",
+        config="config.yaml"
+    output:
+        f"{RESULTS_DIR}/genome_consistency_check.tsv"
+    conda:
+        "envs/environment_amr.yaml"
+    shell:
+        "python src/genome_checker.py --input {input} --config {input.config} --output {output}"
 # -------------------------------------------------------
 # Rule: genotypic and phenotypic integration
 # -------------------------------------------------------
@@ -244,7 +262,7 @@ rule integration:
         assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids),
         amr_file= f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv"
     output:
-        f"{RESULTS_DIR}/integrated_data.csv"
+        f"{RESULTS_DIR}/integrated_data/integrated_data.csv"
     shell:
         """
         python src/DataIntegrator.py {SEQ_DIR} {input.metadata_file} {input.host_metadata} {AST_DIR} \
@@ -255,20 +273,33 @@ rule integration:
 # -------------------------------------------------------
 rule preprocessing:
     input:
-       f"{RESULTS_DIR}/integrated_data.csv",
+       data=f"{RESULTS_DIR}/integrated_data.csv",
+       config="config.yaml"
     output:
-        f"{RESULTS_DIR}/integrated_data_preprocessed.csv"
+        f"{RESULTS_DIR}/integrated_data/integrated_data_preprocessed.csv"
     shell:
-        "python src/ml_preprocessor.py --input {input} --config config.yaml --output {output}"
+        "python src/ml_preprocessor.py --input {input.data} --config {input.config} --output {output}"
 
-
-# checkpoint download_sequences:
-#     output: "all_ids.txt"
-#     shell:
-#         "python extract_ids.py > {output}"
-# def get_passed_ids(wc): instead of get_ids
-#     return [x.strip() for x in open("passed_ids.txt") if x.strip()]
-
-# rule downstream:
-#     input:
-#         expand("some/{sample}/result.txt", sample=get_passed_ids)
+# -------------------------------------------------------
+# Rule: ML prepration 
+# -------------------------------------------------------
+rule run_ml_builder:
+    input:
+        data="data/input.csv",
+        config="config.yaml"
+    output:
+        X_train=f"{RESULTS_DIR}/X_train.csv",
+        y_train=f"{RESULTS_DIR}/y_train.csv",
+        X_validation=f"{RESULTS_DIR}/X_validation.csv",
+        y_validation=f"{RESULTS_DIR}/y_validation.csv",
+        X_test=f"{RESULTS_DIR}/X_test.csv",
+        y_test=f"{RESULTS_DIR}/y_test.csv"
+    params:
+        outdir=RESULTS_DIR
+    shell:
+        """
+        python ml_builder.py \
+            --input_file {input.data} \
+            --config_file {input.config} \
+            --output_dir {params.outdir}
+        """
