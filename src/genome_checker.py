@@ -3,7 +3,6 @@ from pathlib import Path
 import yaml
 import argparse
 
-
 class GenomeQC:
     def __init__(self, input_folder, config_file, output_file):
         self.input_folder = Path(input_folder)
@@ -13,8 +12,9 @@ class GenomeQC:
             self.config = yaml.safe_load(f)["genome_completeness_qc"]
 
     def run(self):
+        """Assess the checkm output for each sample folder in input folder dir."""
         failures = []
-
+        #for each sample folder in input folder direcotry
         for sample_dir in self.input_folder.iterdir():
             if not sample_dir.is_dir():
                 continue

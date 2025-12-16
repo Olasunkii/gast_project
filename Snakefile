@@ -37,7 +37,8 @@ rule all:
         f"{RESULTS_DIR}/integrated_data/integrated_data.csv",
         f"{RESULTS_DIR}/integrated_data/integrated_data_preprocessed.csv",
         f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv",
-        f"{RESULTS_DIR}/carbapenem_consistency_check.tsv",
+        f"{RESULTS_DIR}/consistency_checks/carbapenem_consistency_check.tsv",
+        f"{RESULTS_DIR}/consistency_checks/genome_consistency_check.tsv",
         f"{RESULTS_DIR}/X_train.csv",
         f"{RESULTS_DIR}/y_train.csv",
         f"{RESULTS_DIR}/X_validation.csv",
@@ -234,7 +235,7 @@ rule check_carbapenems:
     input:
         AST_DIR
     output:
-        f"{RESULTS_DIR}/carbapenem_consistency_check.tsv"
+        f"{RESULTS_DIR}/consistency_checks/carbapenem_consistency_check.tsv"
     conda:
         "envs/environment_amr.yaml"
     shell:
@@ -244,14 +245,14 @@ rule check_carbapenems:
 # -------------------------------------------------------
 rule check_genome:
     input:
-        data=f"{RESULTS_DIR}/checkm",
+        data_folder=f"{RESULTS_DIR}/checkm",
         config="config.yaml"
     output:
-        f"{RESULTS_DIR}/genome_consistency_check.tsv"
+        f"{RESULTS_DIR}/consistency_checks/genome_consistency_check.tsv"
     conda:
         "envs/environment_amr.yaml"
     shell:
-        "python src/genome_checker.py --input {input} --config {input.config} --output {output}"
+        "python src/genome_checker.py --input {input.data_folder} --config {input.config} --output {output}"
 # -------------------------------------------------------
 # Rule: genotypic and phenotypic integration
 # -------------------------------------------------------
@@ -281,11 +282,11 @@ rule preprocessing:
         "python src/ml_preprocessor.py --input {input.data} --config {input.config} --output {output}"
 
 # -------------------------------------------------------
-# Rule: ML prepration 
+# Rule: ML prepration - target creation & formatting
 # -------------------------------------------------------
 rule run_ml_builder:
     input:
-        data="data/input.csv",
+        data=f"{RESULTS_DIR}/integrated_data/test.csv",
         config="config.yaml"
     output:
         X_train=f"{RESULTS_DIR}/X_train.csv",
@@ -298,8 +299,5 @@ rule run_ml_builder:
         outdir=RESULTS_DIR
     shell:
         """
-        python ml_builder.py \
-            --input_file {input.data} \
-            --config_file {input.config} \
-            --output_dir {params.outdir}
+        python src/MLBuilder.py --input {input.data} --config {input.config} --output {params.outdir}
         """
