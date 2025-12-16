@@ -6,6 +6,11 @@ import yaml
 import argparse
 
 class Preprocessor:
+    """
+    - encoding categorical columns; only manual based on config file
+    - dropping columns 
+    - splitting columns (location, mic values and longitude and latitude)
+    """
     def __init__(self, input_file, config_file, output_file):
         self.input_file = Path(input_file)
         self.output_file = Path(output_file)
@@ -56,11 +61,6 @@ class Preprocessor:
                 column_substrings=un["units_column_contains"],
                 mapping=un["mapping"],
                 normalize_lower=True,
-            )
-        if enc.get("auto_one_hot_encode_rest"):
-            self._auto_one_hot_encode_rest(
-                exclude_exact=enc.get("auto_one_hot_exclude_exact", []),
-                exclude_contains=enc.get("auto_one_hot_exclude_contains", []),
             )
         self._encode_bool_cols()
 
@@ -164,35 +164,6 @@ class Preprocessor:
         self.df.drop(columns=nan_only, inplace=True)
 
         print("Dropped NaN-only:", len(nan_only))
-
-    def _auto_one_hot_encode_rest(self, exclude_exact=None, exclude_contains=None):
-        """Encodes remaining categorical columns by one hot encoding them."""
-        exclude_exact = set(exclude_exact or [])
-        exclude_contains_lower = [s.lower() for s in (exclude_contains or [])]
-        obj_cols = self.df.select_dtypes(include=["object", "category"]).columns # only categorical columns
-        print(obj_cols)
-        # filter out columns that were manually encoded
-        cat_cols = [
-            c
-            for c in obj_cols
-            if c not in exclude_exact
-            and not any(sub in c.lower() for sub in exclude_contains_lower)
-        ]
-        if not cat_cols:#o remaining object columns
-            return
-        print(cat_cols)
-        # normalize NaN-like strings to numpy nan value
-        for c in cat_cols:
-            s = self.df[c].astype(str).str.strip()
-            mask = s.isin(["nan", "None", ""])
-            self.df[c] = s.mask(mask, np.nan)
-        # one-hot encode
-        self.df = pd.get_dummies(
-            self.df,
-            columns=cat_cols,
-            dummy_na=False 
-        )
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

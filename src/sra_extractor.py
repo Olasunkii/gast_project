@@ -48,6 +48,13 @@ class SRAExtractor:
         self.data_seq.mkdir(parents=True, exist_ok=True)
         self.ast_dir.mkdir(parents=True, exist_ok=True)
         self.host_metadata_dir.mkdir(parents=True, exist_ok=True)
+        self.CARBAPENEMS = {
+            "imipenem",
+            "meropenem",
+            "ertapenem",
+            "doripenem",
+            "biapenem"
+        }
 
         self.default_retmax = default_retmax
         self.sleep_between_requests = sleep_between_requests
@@ -404,6 +411,9 @@ class SRAExtractor:
                 rows.append(cells)
             antibiogram_df = pd.DataFrame(rows, columns=columns)
 
+        if not self._contains_carbapenem(antibiogram_df):#if no carabapenem present
+            antibiogram_df = pd.DataFrame()
+
         # extract host metadata
         attrs = root.findall(".//Attributes/Attribute")
         host = {}
@@ -420,7 +430,22 @@ class SRAExtractor:
         host_df = pd.DataFrame([host])
 
         return antibiogram_df, host_df
+    def _contains_carbapenem(self, df: pd.DataFrame) -> bool:
+        if df.empty:
+            return False
+        # normalize column names
+        cols = {c.lower(): c for c in df.columns}
+        drug_col = None
+        for key in ("antibiotic", "drug", "agent"):
+            if key in cols:
+                drug_col = cols[key]
+                break
 
+        if drug_col is None:
+            return False
+
+        drugs = (df[drug_col].astype(str).str.lower().str.strip())
+        return drugs.isin(self.CARBAPENEMS).any()
 
     def collect_resistant_metadata(self, organism: str, retmax: int, batchsize_: int = 20) -> pd.DataFrame:
         """Keep searching SRA id, antibiogram filtering, host-metadata aggregation.

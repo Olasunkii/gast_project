@@ -16,7 +16,7 @@ class Integration:
     def run(self):
         """Integrates step-for-step host metadata, AST information, AMR resistance genes and draft genome."""
         base = pd.read_csv(self.sample_metadata_file)        
-        self.integrated_df = base[["BioSample", "Run"]].copy() # Load only the columns required for merging
+        self.integrated_df = base[["BioSample", "Run", "Model"]].copy() # Load only the columns required for merging
         print(self.integrated_df)
         self.integrate_host_metadata()
         self.integrate_ast()

@@ -183,7 +183,7 @@ rule bakta:
 # -------------------------------------------------------
 rule amrfinder_db:
     output:
-        touch("amrfinder_db_ready.txt")
+        touch("amrfinder_db_updated.txt")
     conda:
         "envs/environment_amr.yaml"
     shell:
@@ -209,7 +209,7 @@ rule amrfinder:
                   --threads {threads}
         """
 # -------------------------------------------------------
-# Rule: Feature Extraction — transforming resistance genes to gene present/absence
+# Rule: Feature Extraction — transforming resistance genes to gene presence/absence
 # -------------------------------------------------------
 rule amrfinder_transformation:
     input:
@@ -233,8 +233,7 @@ rule check_carbapenems:
     conda:
         "envs/environment_amr.yaml"
     shell:
-        "python src/ast_check_breaking_points.py {input} {output}"
-
+        "python src/ast_check_breaking_points.py --input {input} --config config.yaml --output {output}"
 # -------------------------------------------------------
 # Rule: genotypic and phenotypic integration
 # -------------------------------------------------------
@@ -252,7 +251,7 @@ rule integration:
          "{input.assembly_dir}" {input.amr_file} {output}
         """
 # -------------------------------------------------------
-# Rule: preprocessing integrated data
+# Rule: ML preprocessing integrated data
 # -------------------------------------------------------
 rule preprocessing:
     input:
@@ -260,6 +259,16 @@ rule preprocessing:
     output:
         f"{RESULTS_DIR}/integrated_data_preprocessed.csv"
     shell:
-        """
-        python src/ml_preprocessor.py --input {input} --config config.yaml --output {output}
-        """
+        "python src/ml_preprocessor.py --input {input} --config config.yaml --output {output}"
+
+
+# checkpoint download_sequences:
+#     output: "all_ids.txt"
+#     shell:
+#         "python extract_ids.py > {output}"
+# def get_passed_ids(wc): instead of get_ids
+#     return [x.strip() for x in open("passed_ids.txt") if x.strip()]
+
+# rule downstream:
+#     input:
+#         expand("some/{sample}/result.txt", sample=get_passed_ids)
