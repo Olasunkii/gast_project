@@ -1,3 +1,4 @@
+import os
 configfile: "config.yaml"
 
 # prepare safe organism name & config paths variables setup
@@ -10,10 +11,8 @@ RESULTS_DIR = config['paths']['results_dir']
 DB_DIR = config['paths']['reference_db_dir']
 
 # -------------------------------------------------------
-# Function: load sample names dynamically after metadata exists
+# Function: load sample id's dynamically after metadata exists
 # -------------------------------------------------------
-import os
-
 def get_sample_ids(wildcards):
     path = checkpoints.download_sequences.get(**wildcards).output[0]
     if not os.path.exists(path):
@@ -22,7 +21,6 @@ def get_sample_ids(wildcards):
         header = f.readline().strip().split(',')
         idx = header.index('Run')
         return [line.split(',')[idx].strip() for line in f if line.strip()]
-
 # -------------------------------------------------------
 # Rule: all — desired output including downstream targets
 # -------------------------------------------------------
@@ -50,7 +48,9 @@ rule all:
 # -------------------------------------------------------
 rule fetch_metadata:
     output:
-        out=f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv"
+        out=f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
+        host_metadata = f"{HOST_METADATA_DIR}/host_metadata_all.csv",
+        ast_dir = directory(AST_DIR)
     params:
         email=config["email"],
         organism=organism_safe,
@@ -60,7 +60,6 @@ rule fetch_metadata:
         """
         python3 src/sra_extractor_metadata.py {params.email} {params.organism} {params.retmax}
         """
-
 # -------------------------------------------------------
 # Rule: download_sequences — downloads and logs FASTQ data
 # -------------------------------------------------------
@@ -77,7 +76,6 @@ checkpoint download_sequences:
             --retmax {config[retmax]} \
             --download
         """
-
 # -------------------------------------------------------
 # Rule: fastp — cleaning sequences & sequence analysis
 # -------------------------------------------------------
@@ -189,7 +187,7 @@ rule bakta:
 # -------------------------------------------------------
 rule amrfinder_db:
     output:
-        touch("amrfinder_db_updated.txt")
+        touch("amrfinder_db_ready.txt")
     conda:
         "envs/environment_amr.yaml"
     shell:
@@ -219,16 +217,18 @@ rule amrfinder:
 # -------------------------------------------------------
 rule amrfinder_transformation:
     input:
-        f"{RESULTS_DIR}/amrfinder/"
+        expand(f"{RESULTS_DIR}/amrfinder/{{sample}}.tsv", sample=get_sample_ids)
     output:
         f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv"
     conda:
         "envs/environment_amr.yaml"
     shell:
         """
-        python src/amr_transformer.py --amr_dir {input} --output {output}
+        python src/amr_transformer.py \
+            --amr_files {input} \
+            --output {output}
         """
-# -------------------------------------------------------
+#-------------------------------------------
 # Rule: Consistency check — phenotypic data vs EUCAST breaking points
 # -------------------------------------------------------
 rule check_carbapenems:
@@ -245,14 +245,19 @@ rule check_carbapenems:
 # -------------------------------------------------------
 rule check_genome:
     input:
-        data_folder=f"{RESULTS_DIR}/checkm",
-        config="config.yaml"
+        expand(f"{RESULTS_DIR}/checkm/{{sample}}", sample=get_sample_ids)
     output:
         f"{RESULTS_DIR}/consistency_checks/genome_consistency_check.tsv"
     conda:
         "envs/environment_amr.yaml"
     shell:
-        "python src/genome_checker.py --input {input.data_folder} --config {input.config} --output {output}"
+        """
+        python src/genome_checker.py \
+            --input "{RESULTS_DIR}/checkm/" \
+            --config config.yaml \
+            --output {output}
+        """
+
 # -------------------------------------------------------
 # Rule: genotypic and phenotypic integration
 # -------------------------------------------------------
@@ -274,7 +279,7 @@ rule integration:
 # -------------------------------------------------------
 rule preprocessing:
     input:
-       data=f"{RESULTS_DIR}/integrated_data.csv",
+       data=f"{RESULTS_DIR}/integrated_data/integrated_data.csv",
        config="config.yaml"
     output:
         f"{RESULTS_DIR}/integrated_data/integrated_data_preprocessed.csv"
@@ -286,7 +291,7 @@ rule preprocessing:
 # -------------------------------------------------------
 rule run_ml_builder:
     input:
-        data=f"{RESULTS_DIR}/integrated_data/test.csv",
+        data=f"{RESULTS_DIR}/integrated_data/integrated_data_preprocessed.csv",
         config="config.yaml"
     output:
         X_train=f"{RESULTS_DIR}/X_train.csv",
