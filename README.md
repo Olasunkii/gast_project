@@ -99,8 +99,7 @@ Fill in the inputs as desired. This will be converter into a configuration file 
 
 **Start pipeline via command line**
 
-If not, the configuration parameters must be written exactly as required by the user. You can use `config_parameter_example.yaml` as a template; it must be followed strictly for the pipeline to run correctly. Then start the pipeline by
-
+If not, write the configuration parameters exactly as needed by the user. Use `config_parameter_example.yaml` as the strict template; any deviation will prevent the pipeline from running. The file must be named `config_parameter.yaml`. This step is already automated in the GUI. Start the pipeline using this command:
 
 ```
 snakemake --cores #numb_cores --use-conda --latency-wait 30
