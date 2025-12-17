@@ -59,6 +59,7 @@ if st.button("Run workflow"):
         "organism": organism,
         "email": email,
         "retmax": retmax,
+        "Cores": cores,
         "ml": {
             "column_target_name": column_target_name,
             "scaling": {

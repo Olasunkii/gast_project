@@ -1,24 +1,19 @@
-# config.yaml based on user input
-organism: "Klebsiella pneumoniae"
-email: "example@mail.com"
-retmax: 5
-
-ml: 
-  column_target_name: "carbapenem_resistant"
+organism: Klebsiella pneumoniae
+email: sapom21439@fftube.com
+retmax: 1
+ml:
+  column_target_name: dfgdfgjdfklj
   scaling:
-    method: none   # standard | robust | none
+    method: standard
   split:
     test_size: 0.3
     validation_size: 0.1
-    stratify: True
+    stratify: false
     random_state: 42
-
-# configuration for genome constintency check
 genome_completeness_qc:
   completeness:
-    min: 99        # genome must be ≥ 90%
+    min: 99
   contamination:
-    max: 3         # genome must be ≤ 3%
+    max: 3
   total_contigs:
-    max: 500       # genome must have ≤ 500 contigs
-
+    max: 500

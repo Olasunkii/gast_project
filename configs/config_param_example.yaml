@@ -2,7 +2,7 @@
 organism: "Klebsiella pneumoniae" #should align with NCBI organism names
 email: "example@mail.com"
 retmax: 5
-
+Cores: 8 #default for unicycler
 ml: 
   column_target_name: "carbapenem_resistant"
   scaling:
