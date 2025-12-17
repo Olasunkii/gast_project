@@ -47,7 +47,6 @@ class MLBuilder:
             X_test, y_test,
         )
 
-
     def _derive_carbapenem_target(self):
         """Computes a target column based of any resistance to a carbapenems.
             Then removes the corresponding columns"""

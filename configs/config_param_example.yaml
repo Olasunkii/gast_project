@@ -1,5 +1,5 @@
 # config.yaml based on user input
-organism: "Klebsiella pneumoniae"
+organism: "Klebsiella pneumoniae" #should align with NCBI organism names
 email: "example@mail.com"
 retmax: 5
 

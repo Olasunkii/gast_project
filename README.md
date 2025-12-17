@@ -87,3 +87,18 @@ mv checkm2_db/CheckM2_database/* checkm2_db/ #move database to right folder stru
 rmdir checkm2_db/CheckM2_database
 ```
 The AMRFinderPlus database is updated automatically within its Snakemake rule; the rule writes a designated output file (*amrfinder_db_ready.txt*) that marks the database as current, and removing that file forces Snakemake to perform the database update again.
+
+
+## Running pipeline via gui
+
+Start gui by
+```
+streamlit run test.py
+```
+
+If not, the configuration parameters must be written exactly as required by the user. You can use `config_parameter_example.yaml` as a template; it must be followed strictly for the pipeline to run correctly. Then start the pipeline by
+
+
+```
+snakemake --cores #numb_cores --use-conda --latency-wait 30
+```
