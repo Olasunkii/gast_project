@@ -1,8 +1,4 @@
-# config.yaml
-organism: "Klebsiella pneumoniae"
-email: "example@mail.com"
-retmax: 5
-
+#paths
 paths:
   metadata_dir: "data/metadata"
   host_metadata_dir: "data/host_metadata"
@@ -11,7 +7,7 @@ paths:
   results_dir: "results"
   reference_db_dir: "ref_db"
 
-# ---------------- Configuration for ML setting ----------------
+# Configuration for carabapenem breakingpoints 
 carabapenems:
   - imipenem
   - meropenem
@@ -19,16 +15,7 @@ carabapenems:
   - ertapenem
   - biapenem
 
-ml: 
-  column_target_name: "carbapenem_resistant"
-  scaling:
-    method: none   # standard | robust | none
-  split:
-    test_size: 0.3
-    validation_size: 0.1
-    stratify: True
-    random_state: 42
-# ---------------- Further configuration for perprocessing and constintency checks ----------------
+#Carabapenem breaking points EUCAST 2025
 breakpoints:
   doripenem: [1, 2]
   ertapenem: [0.5, 0.5]
@@ -36,14 +23,6 @@ breakpoints:
   imipenem-relebactam: [2, 2]
   meropenem: [2, 2]
   meropenem-vaborbactam: [8, 8]
-
-genome_completeness_qc:
-  completeness:
-    min: 99        # genome must be ≥ 90%
-  contamination:
-    max: 3         # genome must be ≤ 3%
-  total_contigs:
-    max: 500       # genome must have ≤ 500 contigs
 
 #configuration for preprocessing columns
 preprocessing:

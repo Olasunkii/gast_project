@@ -1,5 +1,6 @@
 import os
-configfile: "config.yaml"
+configfile: "configs/config_parameter.yaml"
+configfile: "configs/config.yaml"
 
 # prepare safe organism name & config paths variables setup
 organism_safe = config['organism'].replace(' ', '_')
@@ -239,7 +240,7 @@ rule check_carbapenems:
     conda:
         "envs/environment_amr.yaml"
     shell:
-        "python src/phenotype_checker.py --input {input} --config config.yaml --output {output}"
+        "python src/phenotype_checker.py --input {input} --config configs/config.yaml --output {output}"
 # -------------------------------------------------------
 # Rule: Consistency check — Genome completion
 # -------------------------------------------------------
@@ -254,7 +255,7 @@ rule check_genome:
         """
         python src/genome_checker.py \
             --input "{RESULTS_DIR}/checkm/" \
-            --config config.yaml \
+            --config configs/config_parameter.yaml \
             --output {output}
         """
 
@@ -280,7 +281,7 @@ rule integration:
 rule preprocessing:
     input:
        data=f"{RESULTS_DIR}/integrated_data/integrated_data.csv",
-       config="config.yaml"
+       config="configs/config.yaml"
     output:
         f"{RESULTS_DIR}/integrated_data/integrated_data_preprocessed.csv"
     shell:
@@ -292,7 +293,7 @@ rule preprocessing:
 rule run_ml_builder:
     input:
         data=f"{RESULTS_DIR}/integrated_data/integrated_data_preprocessed.csv",
-        config="config.yaml"
+        config="configs/config_parameter.yaml"
     output:
         X_train=f"{RESULTS_DIR}/X_train.csv",
         y_train=f"{RESULTS_DIR}/y_train.csv",
