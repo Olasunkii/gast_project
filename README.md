@@ -1,106 +1,187 @@
 # gast_project
 
-This project automates the retrieval of public sequences and metadata for *Klebsiella pneumoniae* and is organized into four phases: data extraction, data cleaning and annotation, data integration, and data preparation for machine-learning.
+This repository implements an automated pipeline for retrieving, processing, and integrating public sequencing data and metadata for *Klebsiella pneumoniae*. The workflow produces a curated dataset suitable for downstream machine-learning applications.
+
+The pipeline is structured into four phases:
+1. Data extraction  
+2. Data cleaning and annotation  
+3. Data integration  
+4. Data preparation for machine learning  
+
+---
+
+## Inputs and Outputs
 
 **Input**
-A user-adjusted configuration and sufficient compute resources (minimum eight CPU cores).
+- User-defined configuration parameters
+- Sufficient compute resources (minimum: 8 CPU cores)
 
 **Output**
-A curated dataset suitable as input for machine-learning models, integrating draft genomes, detected resistance genes, antibiotic susceptibility data and host metadata.
+- A curated dataset integrating:
+  - Draft genomes
+  - Detected antimicrobial resistance genes
+  - Antibiotic susceptibility data
+  - Source of bacterial isolates and isolate metadata
 
-## Workflow walkthrough
+---
 
-The workflow retrieves host and sample metadata and corresponding raw reads, preprocesses those reads with fastp, trims residual adapters with Trim Galore, evaluates read quality with FastQC, assembles draft genomes with Unicycler, annotates assemblies using Bakta, assesses genome quality with CheckM2, identifies resistance and associated genes with AMRFinderPlus, and continues integrating the draft genome, host metadata , and detected resistance genes into a single integrated CSV produced by a python script. Finally the dataset is prepared for machine learning by standaridizing, formatting and data partitioning. There are multiple checks where the user is able to document which isolates fail to meet standards, focusing on carbapenem phenotype breakpoints and genome completeness.
+## System Requirements
 
-<p align="center">
-<img src="overview_workflow.png" width="600">
-</p>
+- Python environment compatible with the packages in `requirements.txt`
+- At least 8 CPU cores for <10 samples
+- 16 or more CPU cores recommended for larger datasets
+- Internet access for database downloads and NCBI retrieval
 
-**Overview of bioinformatics tool**
+---
 
--   fastp
-    -   Read preprocessing: quality filtering, adapter trimming, deduplication, and QC reporting.
+## Step-by-Step Setup and Execution
 
--   Trim Galore
-    -   Adapter and low-quality base trimming.
+### 1. Clone the Repository
 
--   FastQC
-    -   Quality assessment of raw reads, providing per-base metrics and contamination indicators.
+```bash
+git clone <repository_url>
+cd gast_project
+````
 
--   Unicycler
-    -   Short-read assembly of bacterial genomes into draft assemblies. Unicycler can also assemble long-read.
+---
 
--   Bakta
-    -   Automated annotation of bacterial draft genomes, generating gene and protein feature sets.
+### 2. Install Python Dependencies
 
--   CheckM2
-    -   Genome quality estimation using completeness and contamination metrics from marker-gene models.
+Install all required packages listed in `requirements.txt`:
 
--   AMRFinderPlus
-    -   Detection of antimicrobial resistance genes, stress-response determinants, and selected virulence factors.
-
-
-## Setup
-
-Clone the repository, install the dependencies listed in `requirements.txt`, and place the required reference databases as described in the prerequisite section. The `setup_gast.py` script establishes the directory structure needed for the workflow.
-Use at least *eight* CPU cores when processing fewer than ten samples. For larger batches, *sixteen* or more CPU cores are recommended.
-
-Adjust the configuration file before execution. Required fields:
-
-* `retmax`: number of samples to retrieve
-* `email`: contact address for NCBI data retrieval
-* `organism`: default is *Klebsiella pneumoniae*; modify this value to change to a different organism
-
-
-### Prerequisites
-
-* Install required packages for automated data retrieval.
-* Download the associated databases (Checkm2 and bakta).
-
-**Install required packages**
-Use the standard pip installation command to install the required packages stated in the requirements.txt file:
-
-```
+```bash
 pip install -r requirements.txt
 ```
 
+---
 
-**Reference Database Preparation**
+### 3. Prepare Reference Databases
 
-Install and unpack the Bakta database:
+#### 3.1 Bakta Database
 
-```
+```bash
 wget https://zenodo.org/record/14916843/files/db-light.tar.xz
 mkdir -p bakta_db
-tar -xf db-light.tar.xz -C bakta_db #unpack reference database
-mv bakta_db/db-light/* bakta_db/ #move database to right folder structure
+tar -xf db-light.tar.xz -C bakta_db
+mv bakta_db/db-light/* bakta_db/
 rmdir bakta_db/db-light
 ```
 
-Install and unpack the CheckM2 database:
+#### 3.2 CheckM2 Database
 
-```
+```bash
 wget https://zenodo.org/record/5571251/files/checkm2_database.tar.gz
 mkdir -p checkm2_db
-tar -xzf checkm2_database.tar.gz -C checkm2_db #unpack reference database
-mv checkm2_db/CheckM2_database/* checkm2_db/ #move database to right folder structure
+tar -xzf checkm2_database.tar.gz -C checkm2_db
+mv checkm2_db/CheckM2_database/* checkm2_db/
 rmdir checkm2_db/CheckM2_database
 ```
-The AMRFinderPlus database is updated automatically within its Snakemake rule; the rule writes a designated output file (*amrfinder_db_ready.txt*) that marks the database as current, and removing that file forces Snakemake to perform the database update again.
 
+#### 3.3 AMRFinderPlus Database
 
-## Running pipeline via gui
+The AMRFinderPlus database is managed automatically by Snakemake.
+A file named `amrfinder_db_ready.txt` indicates a current database state.
+Deleting this file forces a database update during the next run.
 
-Start gui by
+---
+
+### 4. Initialize Project Structure
+
+Run the setup script to create the required directory layout:
+
+```bash
+python setup_gast.py
 ```
+
+---
+
+## Configuration Parameters
+
+All executions require a configuration file named `config_parameter.yaml`.
+
+Mandatory fields:
+
+* `retmax`: number of samples to retrieve
+* `email`: contact email for NCBI queries
+* `organism`: default is *Klebsiella pneumoniae*
+
+These can be configured via Graphical User Interface (GUI) or manual. Below are either of these scenario's described
+
+---
+
+## Path A: Execution via Graphical User Interface (GUI)
+
+### 5A. Launch the GUI
+
+```bash
 streamlit run gui.py
 ```
-Fill in the inputs as desired. This will automatically be converted into a configuration file `config_parameter.yaml`. Press the `run workflow`-button to launch the Snakemake pipeline.
 
-**Start pipeline via command line**
+### 6A. Configure Parameters in the GUI
 
-If not, write the configuration parameters exactly as needed by the user. Use `config_parameter_example.yaml` as the strict template; any deviation will prevent the pipeline from running. The file must be named `config_parameter.yaml`. This step is already automated in the GUI. Start the pipeline using this command:
+* Enter all required parameters directly in the interface.
+* The GUI automatically generates `config_parameter.yaml`.
 
+### 7A. Run the Pipeline
+
+* Press the **Run workflow** button.
+* Snakemake is launched internally using the generated configuration.
+* No manual configuration file editing is required.
+
+---
+
+## Path B: Execution via Command Line (Terminal)
+
+### 5B. Create the Configuration File
+
+* Copy `config_parameter_example.yaml`.
+* Rename it to `config_parameter.yaml`.
+* Edit all fields exactly as required.
+    * Any deviation from the template format will prevent execution.
+
+### 6B. Run the Pipeline Manually
+
+```bash
+snakemake --cores <number_of_cores> --use-conda --latency-wait <time in seconds>
 ```
-snakemake --cores #numb_cores --use-conda --latency-wait 30
-```
+
+---
+
+## Workflow Overview
+
+The pipeline performs the following operations in sequence:
+
+1. Retrieval of source of bacterial isolates and sample metadata and raw sequencing reads
+2. Adapter trimming with Trim Galore
+3. Quality assessment with FastQC
+4. Draft genome assembly with Unicycler
+5. Genome annotation using Bakta
+6. Genome quality assessment with CheckM2
+7. Detection of resistance and associated genes using AMRFinderPlus
+8. Integration of genomes, resistance profiles, and metadata into a unified CSV
+9. Dataset standardization, encoding, and partitioning for machine learning
+
+Multiple validation checkpoints allow documentation of failed isolates, with emphasis on carbapenem phenotype breakpoints and genome completeness.
+
+---
+
+## Bioinformatics Tools Used
+* **Trim Galore**
+  Adapter and low-quality base trimming.
+
+* **FastQC**
+  Quality assessment of raw sequencing reads.
+
+* **Unicycler**
+  Short-read bacterial genome assembly (long-read support available).
+
+* **Bakta**
+  Automated annotation of bacterial draft genomes.
+
+* **CheckM2**
+  Genome completeness and contamination assessment.
+
+* **AMRFinderPlus**
+  Identification of antimicrobial resistance genes, stress-response genes, and selected virulence factors.
+
+<p align="center"> <img src="overview_workflow.png" width="600"> </p>

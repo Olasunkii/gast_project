@@ -78,32 +78,12 @@ checkpoint download_sequences:
             --download
         """
 # -------------------------------------------------------
-# Rule: fastp — cleaning sequences & sequence analysis
-# -------------------------------------------------------
-rule fastp:
-    input:
-        r1 = f"{SEQ_DIR}/{{sample}}/{{sample}}_1.fastq.gz",
-        r2 = f"{SEQ_DIR}/{{sample}}/{{sample}}_2.fastq.gz"
-    output:
-        r1 = f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_1.fastq.gz",
-        r2 = f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_2.fastq.gz",
-        html = f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_fastp.html",
-        json = f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_fastp.json"
-    conda:
-        "envs/environment_qc.yaml"
-    shell:
-        """
-        fastp -i {input.r1} -I {input.r2} \
-        -o {output.r1} -O {output.r2} \
-        -h {output.html} -j {output.json}
-        """
-# -------------------------------------------------------
 # Rule: trimgalore — adapter trimming
 # -------------------------------------------------------
 rule trim_galore:
     input:
-        r1=f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_1.fastq.gz",
-        r2=f"{RESULTS_DIR}/fastp/{{sample}}/{{sample}}_2.fastq.gz"
+        r1 = f"{SEQ_DIR}/{{sample}}/{{sample}}_1.fastq.gz",
+        r2 = f"{SEQ_DIR}/{{sample}}/{{sample}}_2.fastq.gz"
     output:
         r1=f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_1_val_1.fq.gz",
         r2=f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_2_val_2.fq.gz"
