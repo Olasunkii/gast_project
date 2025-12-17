@@ -93,7 +93,7 @@ The AMRFinderPlus database is updated automatically within its Snakemake rule; t
 
 Start gui by
 ```
-streamlit run test.py
+streamlit run gui.py
 ```
 Fill in the inputs as desired. This will be converter into a configuration file (config_parameter.yaml). Press the button to launch the Snakemake pipeline.
 
