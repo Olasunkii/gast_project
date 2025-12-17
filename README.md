@@ -95,7 +95,7 @@ Start gui by
 ```
 streamlit run gui.py
 ```
-Fill in the inputs as desired. This will be converter into a configuration file (config_parameter.yaml). Press the button to launch the Snakemake pipeline.
+Fill in the inputs as desired. This will automatically be converted into a configuration file `config_parameter.yaml`. Press the `run workflow`-button to launch the Snakemake pipeline.
 
 **Start pipeline via command line**
 
