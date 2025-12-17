@@ -11,15 +11,19 @@ class MLBuilder:
       - create one target column of carbapenem resistance
       - dataset split
       - scaling on conintinuous columns (fit on train only and not binary or ordinal columns)
+      config.yaml contains development settings
+      config_parameter.yaml contains user-defined parameters.
     """
-    def __init__(self, input_file, config_file, output_dir):
-        self.input_file = Path(input_file)
+    def __init__(self, input_path, config_path, config_params_path, output_dir):
+        self.input_file = Path(input_path)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.scaler_ = None
         self.target = None
-        with open(config_file, "r") as f:
+        with open(config_path, "r") as f:
             self.config = yaml.safe_load(f)
+        with open(config_params_path, "r") as f:
+            self.config_params = yaml.safe_load(f)
 
     def run(self):
         self.df = pd.read_csv(self.input_file)
@@ -63,7 +67,7 @@ class MLBuilder:
         if not phenotype_cols:
             raise ValueError("No carbapenem resistance phenotype columns found.")
 
-        self.target = self.config["ml"]["column_target_name"]
+        self.target = self.config_params["ml"]["column_target_name"]
 
         self.df[self.target] = (
             self.df[phenotype_cols].max(axis=1) >= 1
@@ -76,7 +80,7 @@ class MLBuilder:
         self.df.drop(columns=drop_cols, inplace=True)
 
     def _split_data(self, X, y):
-        cfg = self.config["ml"]["split"]
+        cfg = self.config_params["ml"]["split"]
 
         X_tmp, X_test, y_tmp, y_test = train_test_split(
             X,
@@ -103,7 +107,7 @@ class MLBuilder:
         Scales only continuous numeric columns based on config.
         Binary / low-cardinality numeric columns are untouched.
         """
-        scaling_cfg = self.config["ml"].get("scaling", {})
+        scaling_cfg = self.config_params["ml"].get("scaling", {})
         method = scaling_cfg.get("method", "none").lower()
 
         if method == "none":
@@ -152,8 +156,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--config", required=True)
+    parser.add_argument("--config-params", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
-    checker = MLBuilder(args.input, args.config, args.output)
+    checker = MLBuilder(
+        input_path=args.input,
+        config_path=args.config,
+        config_params_path=args.config_params,
+        output_dir=args.output
+    )
     checker.run()
+

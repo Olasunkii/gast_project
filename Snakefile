@@ -293,7 +293,8 @@ rule preprocessing:
 rule run_ml_builder:
     input:
         data=f"{RESULTS_DIR}/integrated_data/integrated_data_preprocessed.csv",
-        config="configs/config_parameter.yaml"
+        config_main="configs/config.yaml",
+        config_params="configs/config_parameter.yaml"
     output:
         X_train=f"{RESULTS_DIR}/X_train.csv",
         y_train=f"{RESULTS_DIR}/y_train.csv",
@@ -305,5 +306,9 @@ rule run_ml_builder:
         outdir=RESULTS_DIR
     shell:
         """
-        python src/MLBuilder.py --input {input.data} --config {input.config} --output {params.outdir}
+        python src/MLBuilder.py \
+            --input {input.data} \
+            --config {input.config_main} \
+            --config-params {input.config_params} \
+            --output {params.outdir}
         """
