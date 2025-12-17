@@ -95,6 +95,9 @@ Start gui by
 ```
 streamlit run test.py
 ```
+Fill in the inputs as desired. This will be converter into a configuration file (config_parameter.yaml). Press the button to launch the Snakemake pipeline.
+
+**Start pipeline via command line**
 
 If not, the configuration parameters must be written exactly as required by the user. You can use `config_parameter_example.yaml` as a template; it must be followed strictly for the pipeline to run correctly. Then start the pipeline by
 
