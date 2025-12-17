@@ -10,7 +10,7 @@ A curated dataset suitable as input for machine-learning models, integrating dra
 
 ## Workflow walkthrough
 
-The workflow retrieves host and sample metadata and corresponding raw reads, preprocesses those reads with fastp, trims residual adapters with Trim Galore, evaluates read quality with FastQC, assembles draft genomes with Unicycler, annotates assemblies using Bakta, assesses genome quality with CheckM2, identifies resistance and associated genes with AMRFinderPlus, and continues integrating the draft genome, host metadata (pending), and detected resistance genes into a single integrated CSV produced by a python script. Finally the dataset is prepared for machine learning by standaridizing, formatting and data partitioning.
+The workflow retrieves host and sample metadata and corresponding raw reads, preprocesses those reads with fastp, trims residual adapters with Trim Galore, evaluates read quality with FastQC, assembles draft genomes with Unicycler, annotates assemblies using Bakta, assesses genome quality with CheckM2, identifies resistance and associated genes with AMRFinderPlus, and continues integrating the draft genome, host metadata , and detected resistance genes into a single integrated CSV produced by a python script. Finally the dataset is prepared for machine learning by standaridizing, formatting and data partitioning. There are multiple checks where the user is able to document which isolates fail to meet standards, focusing on carbapenem phenotype breakpoints and genome completeness.
 
 <p align="center">
 <img src="overview_workflow.png" width="600">

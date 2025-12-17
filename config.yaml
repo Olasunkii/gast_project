@@ -54,7 +54,7 @@ preprocessing:
 
   location:
     source_column: "geographic location"
-    target_columns: ["Country", "State/Province"]
+    target_columns: ["Country", "State/Province"] #location column is split into these two
     latlon_column: "latitude and longitude"
 
   mic_split:
@@ -113,18 +113,8 @@ preprocessing:
         "hlar": 2
         "high level aminoglycoside resistance": 2
 
-  
-    auto_one_hot_encode_rest: true
-    auto_one_hot_exclude_exact:
-        - "Assembled_seq"
-    auto_one_hot_exclude_contains:
-      - "measurement sign"
-      - "measurement unit"
-      - "phenotype"
-      - "resistance phenotype"
-      - "_phen"
   drop:
-    explicit:
+    explicit: #drop columns with explicit names
       - "BioSample"
       - "Run"
       - "isolate"
@@ -134,7 +124,7 @@ preprocessing:
       - "sample"
       - "organism_complex"
 
-    contains:
+    contains: #drop columns that contains below texts
       - "vendor"
       - "laboratory typing"
       - "testing standard"
