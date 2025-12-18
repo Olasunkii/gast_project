@@ -8,8 +8,6 @@ The pipeline is structured into four phases:
 3. Data integration  
 4. Data preparation for machine learning  
 
----
-
 ## Inputs and Outputs
 
 **Input**
@@ -23,7 +21,6 @@ The pipeline is structured into four phases:
   - Antibiotic susceptibility data
   - Source of bacterial isolates and isolate metadata
 
----
 
 ## System Requirements
 
@@ -31,8 +28,6 @@ The pipeline is structured into four phases:
 - At least 8 CPU cores for <10 samples
 - 16 or more CPU cores recommended for larger datasets
 - Internet access for database downloads and NCBI retrieval
-
----
 
 ## Step-by-Step Setup and Execution
 
@@ -43,8 +38,6 @@ git clone <repository_url>
 cd gast_project
 ````
 
----
-
 ### 2. Install Python Dependencies
 
 Install all required packages listed in `requirements.txt`:
@@ -52,8 +45,6 @@ Install all required packages listed in `requirements.txt`:
 ```bash
 pip install -r requirements.txt
 ```
-
----
 
 ### 3. Prepare Reference Databases
 
@@ -82,8 +73,6 @@ rmdir checkm2_db/CheckM2_database
 The AMRFinderPlus database is managed automatically by Snakemake.
 A file named `amrfinder_db_ready.txt` indicates a current database state.
 Deleting this file forces a database update during the next run.
-
----
 
 ### 4. Initialize Project Structure
 
@@ -127,8 +116,6 @@ streamlit run gui.py
 * Press the **Run workflow** button.
 * Snakemake is launched internally using the generated configuration.
 * No manual configuration file editing is required.
-
----
 
 ## Path B: Execution via Command Line (Terminal)
 

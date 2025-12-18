@@ -33,6 +33,7 @@ rule all:
         expand(f"{RESULTS_DIR}/checkm/{{sample}}", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/bakta/{{sample}}/{{sample}}.fna", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/amrfinder/{{sample}}.tsv", sample=get_sample_ids),
+        expand(f"{RESULTS_DIR}/quast/{{sample}}/report.tsv", sample=get_sample_ids),
         f"{RESULTS_DIR}/integrated_data/integrated_data.csv",
         f"{RESULTS_DIR}/integrated_data/integrated_data_preprocessed.csv",
         f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv",
@@ -124,6 +125,22 @@ rule unicycler_assembly:
     shell:
         "unicycler -1 {input.r1} -2 {input.r2} -o {RESULTS_DIR}/assembly/{wildcards.sample} -t {threads}"
 # -------------------------------------------------------
+# Rule: QUAST — assembly quality assessment
+# -------------------------------------------------------
+rule quast:
+    input:
+        assembly = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta"
+    output:
+        report = f"{RESULTS_DIR}/quast/{{sample}}/report.tsv"
+    conda:
+        "envs/environment_quast.yaml"
+    threads: 8
+    shell:
+        """
+        quast {input.assembly} --threads {threads} \
+            --output-dir {RESULTS_DIR}/quast/{wildcards.sample} 
+        """
+# -------------------------------------------------------
 # Rule: Checkm2 — Analyze contamination on draft genome
 # -------------------------------------------------------
 rule checkm:
@@ -202,7 +219,7 @@ rule amrfinder_transformation:
     output:
         f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv"
     conda:
-        "envs/environment_amr.yaml"
+        "envs/environment_python.yaml"
     shell:
         """
         python src/amr_transformer.py \
@@ -218,7 +235,7 @@ rule check_carbapenems:
     output:
         f"{RESULTS_DIR}/consistency_checks/carbapenem_consistency_check.tsv"
     conda:
-        "envs/environment_amr.yaml"
+       "envs/environment_python.yaml"
     shell:
         "python src/phenotype_checker.py --input {input} --config configs/config.yaml --output {output}"
 # -------------------------------------------------------
@@ -230,7 +247,7 @@ rule check_genome:
     output:
         f"{RESULTS_DIR}/consistency_checks/genome_consistency_check.tsv"
     conda:
-        "envs/environment_amr.yaml"
+        "envs/environment_python.yaml"
     shell:
         """
         python src/genome_checker.py \
@@ -238,7 +255,6 @@ rule check_genome:
             --config configs/config_parameter.yaml \
             --output {output}
         """
-
 # -------------------------------------------------------
 # Rule: genotypic and phenotypic integration
 # -------------------------------------------------------
@@ -250,6 +266,8 @@ rule integration:
         amr_file= f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv"
     output:
         f"{RESULTS_DIR}/integrated_data/integrated_data.csv"
+    conda:
+        "envs/environment_python.yaml"
     shell:
         """
         python src/DataIntegrator.py {SEQ_DIR} {input.metadata_file} {input.host_metadata} {AST_DIR} \
@@ -264,6 +282,8 @@ rule preprocessing:
        config="configs/config.yaml"
     output:
         f"{RESULTS_DIR}/integrated_data/integrated_data_preprocessed.csv"
+    conda:
+        "envs/environment_python.yaml"
     shell:
         "python src/ml_preprocessor.py --input {input.data} --config {input.config} --output {output}"
 
@@ -284,6 +304,8 @@ rule run_ml_builder:
         y_test=f"{RESULTS_DIR}/y_test.csv"
     params:
         outdir=RESULTS_DIR
+    conda:
+        "envs/environment_python.yaml"
     shell:
         """
         python src/MLBuilder.py \

@@ -68,7 +68,7 @@ class MLBuilder:
             raise ValueError("No carbapenem resistance phenotype columns found.")
 
         self.target = self.config_params["ml"]["column_target_name"]
-
+        #if any sign of resistance is shown 1 otherwis 0
         self.df[self.target] = (
             self.df[phenotype_cols].max(axis=1) >= 1
         ).astype(int)
@@ -81,7 +81,7 @@ class MLBuilder:
 
     def _split_data(self, X, y):
         cfg = self.config_params["ml"]["split"]
-
+        #split data first based on test size
         X_tmp, X_test, y_tmp, y_test = train_test_split(
             X,
             y,
@@ -89,7 +89,7 @@ class MLBuilder:
             random_state=cfg["random_state"],
             stratify=y if cfg.get("stratify", True) else None,
         )
-
+        #determine validation size relative to remaining data (train-> train&validation)
         val_rel = cfg["validation_size"] / (1 - cfg["test_size"])
 
         X_train, X_validation, y_train, y_validation = train_test_split(
@@ -104,9 +104,8 @@ class MLBuilder:
 
     def _scale(self, X_train, X_validation, X_test):
         """
-        Scales only continuous numeric columns based on config.
-        Binary / low-cardinality numeric columns are untouched.
-        """
+            Scales only continuous numeric columns based on config.
+            Binary / low-cardinality numeric columns are not scaled"""
         scaling_cfg = self.config_params["ml"].get("scaling", {})
         method = scaling_cfg.get("method", "none").lower()
 
