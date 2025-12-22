@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 import pandas as pd
 
+
 class AMRTransformer:
     def __init__(self, amr_files, output_file):
         self.amr_files = [Path(f) for f in amr_files]

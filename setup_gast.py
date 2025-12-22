@@ -8,7 +8,6 @@ Run this once after cloning:
     python setup_gast.py
 """
 
-import os
 from pathlib import Path
 import yaml
 
@@ -163,9 +162,9 @@ __pycache__/
 .DS_Store
 """
         gitignore_path.write_text(gitignore)
-        print(f"[OK] .gitignore created.")
+        print("[OK] .gitignore created.")
     else:
-        print(f"[SKIP] .gitignore already exists.")
+        print("[SKIP] .gitignore already exists.")
 
     print("\n✅ GAST project setup complete.\n")
 

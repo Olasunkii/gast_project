@@ -3,6 +3,7 @@ from pathlib import Path
 import yaml
 import argparse
 
+
 class PhenotypeChecker:
     def __init__(self, input_folder, config_file, output_file):
         self.input_folder = Path(input_folder)
@@ -25,15 +26,13 @@ class PhenotypeChecker:
             pd.DataFrame(out).to_csv(self.output_file, sep="\t", index=False)
         else:
             with open(self.output_file, "w") as f:
-                f.write("All carbapenem resistance phenotypes consistent with EUCAST clinical breakpoints.\n")
+                f.write(
+                    "All carbapenem resistance phenotypes consistent with EUCAST clinical breakpoints.\n"
+                )
 
     def _has_required(self, df):
         c = df.columns
-        return (
-            "Antibiotic" in c
-            and "Measurement" in c
-            and "Resistance phenotype" in c
-        )
+        return "Antibiotic" in c and "Measurement" in c and "Resistance phenotype" in c
 
     def _check_file(self, sample_name, df):
         acc = []
@@ -54,13 +53,15 @@ class PhenotypeChecker:
             if expected is None or reported is None:
                 continue
             if expected != reported:
-                acc.append({
-                    "sample": sample_name,
-                    "antibiotic": ab,
-                    "mic_value": mic,
-                    "reported_sir": reported,
-                    "expected_sir": expected
-                })
+                acc.append(
+                    {
+                        "sample": sample_name,
+                        "antibiotic": ab,
+                        "mic_value": mic,
+                        "reported_sir": reported,
+                        "expected_sir": expected,
+                    }
+                )
 
         return acc
 

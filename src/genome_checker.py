@@ -3,6 +3,7 @@ from pathlib import Path
 import yaml
 import argparse
 
+
 class GenomeQC:
     def __init__(self, input_folder, config_file, output_file):
         self.input_folder = Path(input_folder)
@@ -14,7 +15,7 @@ class GenomeQC:
     def run(self):
         """Assess the checkm output for each sample folder in input folder dir."""
         failures = []
-        #for each sample folder in input folder direcotry
+        # for each sample folder in input folder direcotry
         for sample_dir in self.input_folder.iterdir():
             if not sample_dir.is_dir():
                 continue
@@ -30,7 +31,9 @@ class GenomeQC:
             pd.DataFrame(failures).to_csv(self.output_file, sep="\t", index=False)
         else:
             with open(self.output_file, "w") as f:
-                f.write("All genomes pass completeness, contamination, and contig thresholds.\n")
+                f.write(
+                    "All genomes pass completeness, contamination, and contig thresholds.\n"
+                )
 
     def _check(self, sample_name, df):
         """if isolate fails on genome checks it will be documented."""
@@ -38,7 +41,7 @@ class GenomeQC:
         comp_min = self.config["completeness"]["min"]
         cont_max = self.config["contamination"]["max"]
         contigs_max = self.config["total_contigs"]["max"]
-        
+
         for _, row in df.iterrows():
             complete = row.get("Completeness")
             cont = row.get("Contamination")
@@ -55,13 +58,15 @@ class GenomeQC:
                 fail.append(f"Contigs>{contigs_max}")
 
             if fail:
-                acc.append({
-                    "sample": sample_name,
-                    "Completeness": complete,
-                    "Contamination": cont,
-                    "Total_Contigs": contigs,
-                    "Failures": ";".join(fail)
-                })
+                acc.append(
+                    {
+                        "sample": sample_name,
+                        "Completeness": complete,
+                        "Contamination": cont,
+                        "Total_Contigs": contigs,
+                        "Failures": ";".join(fail),
+                    }
+                )
 
         return acc
 

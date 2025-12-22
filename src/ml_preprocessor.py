@@ -1,16 +1,16 @@
 import pandas as pd
-import numpy as np
 from pathlib import Path
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, OneHotEncoder
 import yaml
 import argparse
+
 
 class Preprocessor:
     """
     - encoding categorical columns; only manual based on config file
-    - dropping columns 
+    - dropping columns
     - splitting columns (location, mic values and longitude and latitude)
     """
+
     def __init__(self, input_file, config_file, output_file):
         self.input_file = Path(input_file)
         self.output_file = Path(output_file)
@@ -18,17 +18,17 @@ class Preprocessor:
             self.config = yaml.safe_load(f)
 
     def run(self):
-        """Preprocesses the data to splitting, dropping and encoding columns. """
+        """Preprocesses the data to splitting, dropping and encoding columns."""
         self.df = pd.read_csv(self.input_file)
         self._run_structural()
-        self._drop_columns_initial() #drops columns that do not have to be encoded
+        self._drop_columns_initial()  # drops columns that do not have to be encoded
         self._encode()
-        self._drop_nan_columns() #drops columns only containing nan
+        self._drop_nan_columns()  # drops columns only containing nan
         self.df.to_csv(self.output_file, index=False)
 
     def _run_structural(self):
         """Splitting of location, combination of antibiotics and latitude and longitude columns.
-            Drops the original columns that were replaced by the newly split columns."""
+        Drops the original columns that were replaced by the newly split columns."""
         if self.config["preprocessing"]["structural"]["split_location"]:
             self._split_location()
 
@@ -37,9 +37,8 @@ class Preprocessor:
         if self.config["preprocessing"]["structural"]["split_latlon"]:
             self._split_latlon()
 
-
     def _encode(self):
-        """Encode selected categorical values to standardized numeric codes based on NCBI conventions, 
+        """Encode selected categorical values to standardized numeric codes based on NCBI conventions,
         then one-hot encode all remaining categorical columns."""
         enc = self.config.get("preprocessing", {}).get("encoding", {})
         if enc.get("encode_comparison_signs"):
@@ -85,7 +84,7 @@ class Preprocessor:
         self.df[bool_cols] = self.df[bool_cols].astype(int)
 
     def _split_latlon(self):
-        """ Splits latitude and longitude to each a column including corresponding sign convention for direction"""
+        """Splits latitude and longitude to each a column including corresponding sign convention for direction"""
         col = self.config["preprocessing"]["location"]["latlon_column"]
 
         lat_list = []
@@ -97,7 +96,7 @@ class Preprocessor:
             lat_d = parts[1]
             lon_v = float(parts[2])
             lon_d = parts[3]
-            #adding sign convention for direction
+            # adding sign convention for direction
             if lat_d == "S":
                 lat_v = -lat_v
             if lon_d == "W":
@@ -116,7 +115,8 @@ class Preprocessor:
         exclude = self.config["preprocessing"]["mic_split"]["exclude_contains"]
 
         meas_cols = [
-            c for c in self.df.columns
+            c
+            for c in self.df.columns
             if any(t in c.lower() for t in targets)
             and not any(e in c.lower() for e in exclude)
         ]
@@ -146,6 +146,7 @@ class Preprocessor:
         dest = self.config["preprocessing"]["location"]["target_columns"]
         self.df[dest] = self.df[col].str.split(":", expand=True)
         self.df.drop(columns=[col], inplace=True)
+
     def _drop_columns_initial(self):
         explicit = self.config["preprocessing"]["drop"]["explicit"]
         existing = [c for c in explicit if c in self.df.columns]
@@ -165,6 +166,7 @@ class Preprocessor:
 
         print("Dropped NaN-only:", len(nan_only))
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
@@ -174,4 +176,3 @@ if __name__ == "__main__":
 
     preprocessor = Preprocessor(args.input, args.config, args.output)
     transformed = preprocessor.run()
-

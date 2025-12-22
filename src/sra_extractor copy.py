@@ -29,11 +29,13 @@ import csv
 
 
 class SRAExtractor:
-    def __init__(self,
-                 project_root: Optional[str] = ".",
-                 email: Optional[str] = None,
-                 default_retmax: int = 100,
-                 sleep_between_requests: float = 0.34):
+    def __init__(
+        self,
+        project_root: Optional[str] = ".",
+        email: Optional[str] = None,
+        default_retmax: int = 100,
+        sleep_between_requests: float = 0.34,
+    ):
         """
         project_root: Root folder of the project.
                       Always pass "../" when using inside notebooks.
@@ -67,14 +69,16 @@ class SRAExtractor:
     def search_sra(self, organism: str, retmax: Optional[int] = None) -> List[str]:
         """Return list of SRA record IDs for a given organism."""
         retmax = retmax or self.default_retmax
-        term = f'{organism}[Organism]'
+        term = f"{organism}[Organism]"
         handle = Entrez.esearch(db="sra", term=term, retmax=retmax)
         record = Entrez.read(handle)
         handle.close()
         id_list = record.get("IdList", [])
         return id_list
 
-    def fetch_runinfo(self, organism_or_idlist, retmax: Optional[int] = None) -> pd.DataFrame:
+    def fetch_runinfo(
+        self, organism_or_idlist, retmax: Optional[int] = None
+    ) -> pd.DataFrame:
         """
         Fetch run info for an organism or list of SRA IDs.
         Returns DataFrame of run info.
@@ -92,7 +96,9 @@ class SRAExtractor:
         attempts = 3
         for attempt in range(attempts):
             try:
-                handle = Entrez.efetch(db="sra", id=id_str, rettype="runinfo", retmode="text")
+                handle = Entrez.efetch(
+                    db="sra", id=id_str, rettype="runinfo", retmode="text"
+                )
                 text = handle.read()
                 handle.close()
                 break
@@ -120,13 +126,28 @@ class SRAExtractor:
     def preview_metadata(self, csvpath: Optional[str] = None, n: int = 10):
         """Preview metadata from file or last loaded DataFrame."""
         if csvpath:
-            p = self.data_meta / csvpath if not Path(csvpath).is_absolute() else Path(csvpath)
+            p = (
+                self.data_meta / csvpath
+                if not Path(csvpath).is_absolute()
+                else Path(csvpath)
+            )
             df = pd.read_csv(p, dtype=str)
         else:
             df = getattr(self, "last_metadata", None)
             if df is None:
                 raise ValueError("No metadata in memory. Provide csvpath.")
-        cols = [c for c in ["Run", "ScientificName", "LibraryLayout", "Platform", "size_MB", "bases"] if c in df.columns]
+        cols = [
+            c
+            for c in [
+                "Run",
+                "ScientificName",
+                "LibraryLayout",
+                "Platform",
+                "size_MB",
+                "bases",
+            ]
+            if c in df.columns
+        ]
         print(df[cols or df.columns[:6]].head(n).to_string(index=False))
 
     def filter_paired_illumina(self, df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
@@ -143,7 +164,18 @@ class SRAExtractor:
 
     def preview_df(self, df: pd.DataFrame, n: int = 10):
         """Quick preview of DataFrame."""
-        cols = [c for c in ["Run", "ScientificName", "LibraryLayout", "Platform", "size_MB", "bases"] if c in df.columns]
+        cols = [
+            c
+            for c in [
+                "Run",
+                "ScientificName",
+                "LibraryLayout",
+                "Platform",
+                "size_MB",
+                "bases",
+            ]
+            if c in df.columns
+        ]
         print(df[cols or df.columns[:6]].head(n).to_string(index=False))
 
     # ------------------------------------------------------------
@@ -159,7 +191,10 @@ class SRAExtractor:
         if len(lines) < 2:
             return []
         fastq_links = lines[1].split("\t")[-1].split(";")
-        return [f"https://{link.strip()}" if not link.startswith("http") else link for link in fastq_links]
+        return [
+            f"https://{link.strip()}" if not link.startswith("http") else link
+            for link in fastq_links
+        ]
 
     def _download_file(self, url, outpath):
         """Download a file with progress bar."""
@@ -174,7 +209,9 @@ class SRAExtractor:
         r = requests.get(url, stream=True, headers=headers, timeout=60)
         total = int(r.headers.get("content-length", 0)) + existing
         mode = "ab" if existing > 0 else "wb"
-        with open(tmp, mode) as f, tqdm(total=total, initial=existing, unit="B", unit_scale=True, desc=outpath.name) as pbar:
+        with open(tmp, mode) as f, tqdm(
+            total=total, initial=existing, unit="B", unit_scale=True, desc=outpath.name
+        ) as pbar:
             for chunk in r.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
@@ -197,7 +234,9 @@ class SRAExtractor:
                 run_dir.mkdir(exist_ok=True)
                 if any(run_dir.glob("*.fastq*")):
                     print(f"✅ {run} already downloaded — skipping.")
-                    writer.writerow([run, "exists", "existing", time.strftime("%Y-%m-%d %H:%M")])
+                    writer.writerow(
+                        [run, "exists", "existing", time.strftime("%Y-%m-%d %H:%M")]
+                    )
                     continue
                 print(f"\n🔽 Downloading {run}...")
                 urls = []
@@ -213,13 +252,31 @@ class SRAExtractor:
                         out = run_dir / Path(url).name
                         self._download_file(url, out)
                         files.append(str(out))
-                    writer.writerow([run, "downloaded", ";".join(files), time.strftime("%Y-%m-%d %H:%M")])
+                    writer.writerow(
+                        [
+                            run,
+                            "downloaded",
+                            ";".join(files),
+                            time.strftime("%Y-%m-%d %H:%M"),
+                        ]
+                    )
                 else:
                     print(f"⚠️ No ENA FASTQ found for {run}. Trying NCBI prefetch...")
                     try:
                         subprocess.run(["prefetch", run], check=True)
-                        subprocess.run(["fasterq-dump", run, "-O", str(run_dir)], check=True)
-                        writer.writerow([run, "downloaded_ncbi", "prefetch/fasterq-dump", time.strftime("%Y-%m-%d %H:%M")])
+                        subprocess.run(
+                            ["fasterq-dump", run, "-O", str(run_dir)], check=True
+                        )
+                        writer.writerow(
+                            [
+                                run,
+                                "downloaded_ncbi",
+                                "prefetch/fasterq-dump",
+                                time.strftime("%Y-%m-%d %H:%M"),
+                            ]
+                        )
                     except Exception as e:
                         print(f"❌ NCBI prefetch failed for {run}: {e}")
-                        writer.writerow([run, "failed", str(e), time.strftime("%Y-%m-%d %H:%M")])
+                        writer.writerow(
+                            [run, "failed", str(e), time.strftime("%Y-%m-%d %H:%M")]
+                        )

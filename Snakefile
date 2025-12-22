@@ -3,7 +3,7 @@ configfile: "configs/config_parameter.yaml"
 configfile: "configs/config.yaml"
 
 # prepare safe organism name & config paths variables setup
-organism_safe = config['organism'].replace(' ', '_')
+ORGANISM_SAFE = config['organism'].replace(' ', '_')
 METADATA_DIR = config['paths']['metadata_dir']
 HOST_METADATA_DIR = config['paths']['host_metadata_dir']
 SEQ_DIR = config['paths']['sequences_dir']
@@ -27,7 +27,7 @@ def get_sample_ids(wildcards):
 # -------------------------------------------------------
 rule all:
     input:
-        f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
+        f"{METADATA_DIR}/SraRunInfo_{ORGANISM_SAFE}.csv",
         f"{SEQ_DIR}/download_log.csv",
         expand(f"{RESULTS_DIR}/fastqc/{{sample}}/{{sample}}_1_val_1_fastqc.html", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/checkm/{{sample}}", sample=get_sample_ids),
@@ -50,12 +50,12 @@ rule all:
 # -------------------------------------------------------
 rule fetch_metadata:
     output:
-        out=f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
+        out=f"{METADATA_DIR}/SraRunInfo_{ORGANISM_SAFE}.csv",
         host_metadata = f"{HOST_METADATA_DIR}/host_metadata_all.csv",
         ast_dir = directory(AST_DIR)
     params:
         email=config["email"],
-        organism=organism_safe,
+        organism=ORGANISM_SAFE,
         retmax=config["retmax"],
         outdir=METADATA_DIR
     shell:
@@ -67,14 +67,14 @@ rule fetch_metadata:
 # -------------------------------------------------------
 checkpoint download_sequences:
     input:
-        metadata = f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv"
+        metadata = f"{METADATA_DIR}/SraRunInfo_{ORGANISM_SAFE}.csv"
     output:
         touch(f"{SEQ_DIR}/download_log.csv")
     shell:
         """
         python3 src/sra_extractor.py \
             --email {config[email]} \
-            --organism {organism_safe} \
+            --organism {ORGANISM_SAFE} \
             --retmax {config[retmax]} \
             --download
         """
@@ -124,22 +124,6 @@ rule unicycler_assembly:
     threads: 16
     shell:
         "unicycler -1 {input.r1} -2 {input.r2} -o {RESULTS_DIR}/assembly/{wildcards.sample} -t {threads}"
-# -------------------------------------------------------
-# Rule: QUAST — assembly quality assessment
-# -------------------------------------------------------
-rule quast:
-    input:
-        assembly = f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta"
-    output:
-        report = f"{RESULTS_DIR}/quast/{{sample}}/report.tsv"
-    conda:
-        "envs/environment_quast.yaml"
-    threads: 8
-    shell:
-        """
-        quast {input.assembly} --threads {threads} \
-            --output-dir {RESULTS_DIR}/quast/{wildcards.sample} 
-        """
 # -------------------------------------------------------
 # Rule: Checkm2 — Analyze contamination on draft genome
 # -------------------------------------------------------
@@ -260,7 +244,7 @@ rule check_genome:
 # -------------------------------------------------------
 rule integration:
     input:
-        metadata_file = f"{METADATA_DIR}/SraRunInfo_{organism_safe}.csv",
+        metadata_file = f"{METADATA_DIR}/SraRunInfo_{ORGANISM_SAFE}.csv",
         host_metadata= f"{HOST_METADATA_DIR}/host_metadata_all.csv",
         assembly_dir = expand(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta",sample=get_sample_ids),
         amr_file= f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv"
