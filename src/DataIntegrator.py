@@ -42,26 +42,29 @@ class Integration:
         self.integrated_df = self.integrated_df.merge(
             host_metadata_df, on="BioSample", how="left"
         )
-
+       
     def integrate_ast(self):
         """Transforms the corresponding antibiogram table to a pandas dataframe.
         Then merges it to the metadata dataframe based on biosample id"""
-        # collect flattened AST rows
         rows = []
         for csv_path in self.ast_dir.glob("*.csv"):
-            sample = csv_path.stem  # sample ID from filename stem
-            ast = pd.read_csv(csv_path).set_index("Antibiotic")
-            # flatten table: antibiotic_measurement to value/method/etc.
-            flat = {}
-            for antibiotic, row in ast.iterrows():
-                for col, val in row.items():
-                    flat[f"{antibiotic}_{col}"] = val
+            sample = csv_path.stem.strip()
+            try:
+                ast = pd.read_csv(csv_path).set_index("Antibiotic")
+                flat = {f"{ant}_{col}": val for ant, row in ast.iterrows() for col, val in row.items()}
+                rows.append({"sample_id": sample, **flat})
+            except Exception as e:
+                print(f"Could not process AST for {sample}: {e}")
 
-            rows.append({"sample_id": sample, **flat})
         ast_all = pd.DataFrame(rows)
-        self.integrated_df = self.integrated_df.merge(
-            ast_all, left_on="BioSample", right_on="sample_id", how="left"
-        )
+        if not ast_all.empty:
+            ast_all["sample_id"] = ast_all["sample_id"].astype(str)
+            self.integrated_df = self.integrated_df.merge(
+                ast_all, left_on="BioSample", right_on="sample_id", how="left"
+            ).drop(columns=["sample_id"])
+        
+        matched = self.integrated_df.dropna(subset=self.integrated_df.filter(like='_').columns, how='all')
+        print(f"AST Data: {len(matched)} samples matched with phenotypic data.")
 
     def integrate_sequences(self):
         """Adding the raw assembled draft genome to the metadata table under clumn Assembled_seq"""
@@ -79,12 +82,12 @@ class Integration:
         amr_gene_presence_df = pd.read_csv(self.amr_file)
         self.integrated_df = self.integrated_df.merge(
             amr_gene_presence_df, left_on="Run", right_on="run_id", how="left"
-        )
+        ).drop(columns=["run_id"])
 
     def _strip_headers(self, data):
         """Removing all FASTA header lines"""
-        return "\n".join([line for line in data.splitlines() if not line.startswith(">")])
-
+        return "".join([line.strip() for line in data.splitlines() if not line.startswith(">")])
+    
 if __name__ == "__main__":
     seq_dir = sys.argv[1]
     sample_metadata_file = sys.argv[2]

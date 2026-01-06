@@ -97,7 +97,7 @@ rule unicycler_assembly:
         r1=f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_1_val_1.fq.gz",
         r2=f"{RESULTS_DIR}/trim_galore/{{sample}}/{{sample}}_2_val_2.fq.gz"
     output:
-        temp(f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta")
+        f"{RESULTS_DIR}/assembly/{{sample}}/assembly.fasta"
     conda: "envs/environment_qc.yaml"
     threads: 16
     shell: "unicycler -1 {input.r1} -2 {input.r2} -o {RESULTS_DIR}/assembly/{wildcards.sample} -t {threads}"
