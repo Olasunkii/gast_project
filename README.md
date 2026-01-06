@@ -172,3 +172,9 @@ Multiple validation checkpoints allow documentation of failed isolates, with emp
   Identification of antimicrobial resistance genes, stress-response genes, and selected virulence factors.
 
 <p align="center"> <img src="overview_workflow.png" width="600"> </p>
+
+---
+
+## Light version
+
+Use `Snakefile_light.smk` if you only require the final dataset. This version minimizes storage usage by creating temporary intermediate tool outputs. It will only save the downloaded raw data, consistency check reports and the final ML-ready datasets.
