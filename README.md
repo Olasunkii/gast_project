@@ -183,6 +183,8 @@ Use `Snakefile_light.smk` if you only require the final dataset. This version mi
 
 ## Other bacterial species
 
-While the pipeline defaults to Klebsiella pneumoniae, its modular design allows for easy adaptation to other bacterial species. Adjust the organism from **Klebsiella pneumoniae** to the preferred species. This must align with the naming convention used in NCBI and with the availability of sequencing reads through the SRA Extractor. If another option is required in the GUI, add the additional species to the SelectBox list in the **GUI.py** script. This option must correspond directly to the official NCBI bacterial species name as well.
+While the pipeline defaults to Klebsiella pneumoniae, its modular design allows for easy adaptation to other bacterial species. 
+1. Adjust the organism from **Klebsiella pneumoniae** to the preferred species. This must align with the naming convention used in NCBI and with the availability of sequencing reads through the SRA Extractor. If another option is required in the GUI, add the additional species to the SelectBox list in the **GUI.py** script. This option must correspond directly to the official NCBI bacterial species name as well.
+2. Update the organism name in the `AMRFinder rule` to match the corresponding AMR organism name (may introduce a bracket instead of a space)
 
 
