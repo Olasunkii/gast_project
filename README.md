@@ -105,6 +105,7 @@ These can be configured via Graphical User Interface (GUI) or manual. Below are 
 ```bash
 streamlit run gui.py
 ```
+This may take some time.
 
 ### 6A. Configure Parameters in the GUI
 
@@ -178,3 +179,10 @@ Multiple validation checkpoints allow documentation of failed isolates, with emp
 ## Light version
 
 Use `Snakefile_light.smk` if you only require the final dataset. This version minimizes storage usage by creating temporary intermediate tool outputs. It will only save the downloaded raw data, consistency check reports and the final ML-ready datasets.
+
+
+## Other bacterial species
+
+While the pipeline defaults to Klebsiella pneumoniae, its modular design allows for easy adaptation to other bacterial species. Adjust the organism from **Klebsiella pneumoniae** to the preferred species. This must align with the naming convention used in NCBI and with the availability of sequencing reads through the SRA Extractor. If another option is required in the GUI, add the additional species to the SelectBox list in the **GUI.py** script. This option must correspond directly to the official NCBI bacterial species name as well.
+
+

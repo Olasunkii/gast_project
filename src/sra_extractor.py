@@ -16,6 +16,7 @@ from typing import Optional, List
 from tqdm import tqdm
 import subprocess
 import shutil
+import time
 import requests
 import xml.etree.ElementTree as ET
 
@@ -502,18 +503,28 @@ class SRAExtractor:
         self, organism: str, retmax: int, batchsize_: int = 20
     ) -> pd.DataFrame:
         """Keep searching SRA id, antibiogram filtering, host-metadata aggregation.
-        Until retmax number has been reached and then saves sample and host metadata."""
+        Until retmax number has been reached and then saves sample and host metadata. 
+        or a 10 minute maximum has been reached."""
         collected_metadata = []
         collected_host_metadata = []
-        start = 0
+        start_index_batch = 0
 
+        start_time = time.time()
+        timeout_seconds = 600 #10 minutes (600 seconds) maximum timeout 
+
+        print(f"[INFO] Starting collection for {organism}. Timeout set to {timeout_seconds}s.")
         while len(collected_metadata) < retmax:
-            sra_ids = self.find_sra_ids_with_antibiogram(organism, retmax, start)
+            elapsed = time.time() - start_time
+            if elapsed > timeout_seconds:
+                print(f"[TIMEOUT] Reached {int(elapsed)}s limit. Saving partial data ({len(collected_metadata)} samples).")
+                break
+    
+            sra_ids = self.find_sra_ids_with_antibiogram(organism, retmax, start_index_batch)
             sample_metadata_df = self.fetch_sra_metadata(sra_ids)
             self._save_batch(
                 sample_metadata_df, collected_metadata, collected_host_metadata
             )
-            start += batchsize_  # move to next batch
+            start_index_batch += batchsize_  # move to next batch
 
         return self._write_outputs(collected_metadata, collected_host_metadata)
 
@@ -539,10 +550,27 @@ class SRAExtractor:
 
         if collected_host_metadata:
             host_df = pd.concat(collected_host_metadata, ignore_index=True)
-            host_df.to_csv(
-                self.host_metadata_dir / "host_metadata_all.csv", index=False
-            )
+            output_file = self.host_metadata_dir / "host_metadata_all.csv"
 
+            if output_file.exists():
+                # Load only the 'BioSample' column from the existing file to save memory
+                existing_ids = pd.read_csv(output_file, usecols=['BioSample'])['BioSample'].values
+                new_unique_rows = host_df[~host_df['BioSample'].isin(existing_ids)]# Filter host_df to keep only IDs NOT in the existing file
+            else:
+                new_unique_rows = host_df                # File doesn't exist, so all rows are added
+            
+            # Only save if there is actually something new
+            if not new_unique_rows.empty:
+                file_exists = output_file.exists()
+                new_unique_rows.to_csv(
+                    output_file, 
+                    mode='a', 
+                    index=False, 
+                    header=not file_exists
+                )
+                print(f"[INFO] Added {len(new_unique_rows)} new unique records.")
+            else:
+                print("[INFO] No new unique BioSamples to add.")
         return pd.concat(collected_metadata, ignore_index=True)
 
 

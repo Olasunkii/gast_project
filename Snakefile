@@ -33,7 +33,6 @@ rule all:
         expand(f"{RESULTS_DIR}/checkm/{{sample}}", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/bakta/{{sample}}/{{sample}}.fna", sample=get_sample_ids),
         expand(f"{RESULTS_DIR}/amrfinder/{{sample}}.tsv", sample=get_sample_ids),
-        expand(f"{RESULTS_DIR}/quast/{{sample}}/report.tsv", sample=get_sample_ids),
         f"{RESULTS_DIR}/integrated_data/integrated_data.csv",
         f"{RESULTS_DIR}/integrated_data/integrated_data_preprocessed.csv",
         f"{RESULTS_DIR}/amrfinder/amr_transformed.tsv",
