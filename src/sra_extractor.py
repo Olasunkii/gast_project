@@ -5,18 +5,20 @@ Interactive SRA metadata fetcher & sequence downloader.
 Works in both Jupyter Notebook and CLI.
 """
 
-import os
-import time
 import csv
-import requests
+from Bio import Entrez
+from Bio.Entrez import Parser
+from pathlib import Path
+import pandas as pd
+import io
+import time
+from typing import Optional, List
+from tqdm import tqdm
 import subprocess
 import shutil
-from pathlib import Path
-from io import StringIO
-from typing import Optional, List
-import pandas as pd
-from Bio import Entrez
-from tqdm import tqdm
+import time
+import requests
+import xml.etree.ElementTree as ET
 
 # Helper: run command and raise with readable error
 def run_cmd(cmd, **kwargs):
@@ -25,12 +27,15 @@ def run_cmd(cmd, **kwargs):
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{e}")
 
+
 class SRAExtractor:
-    def __init__(self,
-                 project_root: Optional[str] = ".",
-                 email = None,
-                 default_retmax: int = 20,
-                 sleep_between_requests: float = 0.34):
+    def __init__(
+        self,
+        project_root: Optional[str] = ".",
+        email=None,
+        default_retmax: int = 20,
+        sleep_between_requests: float = 0.34,
+    ):
         """
         project_root: root folder for the project (creates data/metadata, data/sequences)
         email: NCBI Entrez email (required)
@@ -40,8 +45,19 @@ class SRAExtractor:
         self.project_root = Path(project_root).resolve()
         self.data_meta = self.project_root / "data" / "metadata"
         self.data_seq = self.project_root / "data" / "sequences"
+        self.ast_dir = self.project_root / "data" / "ast"
+        self.host_metadata_dir = self.project_root / "data" / "host_metadata"
         self.data_meta.mkdir(parents=True, exist_ok=True)
         self.data_seq.mkdir(parents=True, exist_ok=True)
+        self.ast_dir.mkdir(parents=True, exist_ok=True)
+        self.host_metadata_dir.mkdir(parents=True, exist_ok=True)
+        self.CARBAPENEMS = {
+            "imipenem",
+            "meropenem",
+            "ertapenem",
+            "doripenem",
+            "biapenem",
+        }
 
         self.default_retmax = default_retmax
         self.sleep_between_requests = sleep_between_requests
@@ -58,6 +74,8 @@ class SRAExtractor:
         print(f"[INFO] Project initialized at {self.project_root}")
         print(f"Metadata folder: {self.data_meta}")
         print(f"Sequences folder: {self.data_seq}")
+        print(f"Antimicrobial susceptibility testing (AST) folder: {self.ast_dir}")
+        print(f"Host metadata folder: {self.host_metadata_dir}")
 
     #######################################################
     # Metadata fetching
@@ -65,13 +83,15 @@ class SRAExtractor:
 
     def search_sra(self, organism: str, retmax: Optional[int] = None) -> List[str]:
         retmax = retmax or self.default_retmax
-        term = f'{organism}[Organism]'
+        term = f"{organism}[Organism]"
         handle = Entrez.esearch(db="sra", term=term, retmax=retmax)
         record = Entrez.read(handle)
         handle.close()
         return record.get("IdList", [])
 
-    def fetch_runinfo(self, organism_or_idlist: str, retmax: Optional[int] = None) -> pd.DataFrame:
+    def fetch_runinfo(
+        self, organism_or_idlist: str, retmax: Optional[int] = None
+    ) -> pd.DataFrame:
         """
         Fetch SRA run metadata for a given organism name or list of IDs.
         Saves CSV metadata file to data/metadata.
@@ -98,7 +118,9 @@ class SRAExtractor:
 
         # Step 2: Fetch the runinfo table
         try:
-            with Entrez.efetch(db="sra", id=",".join(ids), rettype="runinfo", retmode="text") as handle:
+            with Entrez.efetch(
+                db="sra", id=",".join(ids), rettype="runinfo", retmode="text"
+            ) as handle:
                 raw_data = handle.read()
 
             if isinstance(raw_data, bytes):
@@ -113,7 +135,6 @@ class SRAExtractor:
         except Exception as e:
             print(f"[ERROR] Failed to fetch runinfo: {e}")
             return pd.DataFrame()
-
 
     def save_metadata(self, df: pd.DataFrame, filename: Optional[str] = None) -> Path:
         if filename is None:
@@ -136,7 +157,18 @@ class SRAExtractor:
             if df is None:
                 raise ValueError("No metadata loaded and no csvpath provided.")
 
-        display_cols = [c for c in ["Run", "ScientificName", "LibraryLayout", "Platform", "size_MB", "bases"] if c in df.columns]
+        display_cols = [
+            c
+            for c in [
+                "Run",
+                "ScientificName",
+                "LibraryLayout",
+                "Platform",
+                "size_MB",
+                "bases",
+            ]
+            if c in df.columns
+        ]
         if not display_cols:
             display_cols = df.columns.tolist()[:6]
 
@@ -173,7 +205,11 @@ class SRAExtractor:
                 if not part:
                     continue
                 # ENA returns ftp paths like ftp.sra.ebi.ac.uk/vol1/fastq/...
-                if part.startswith("ftp://") or part.startswith("http://") or part.startswith("https://"):
+                if (
+                    part.startswith("ftp://")
+                    or part.startswith("http://")
+                    or part.startswith("https://")
+                ):
                     links.append(part)
                 else:
                     links.append("https://" + part)  # convert ftp path to https
@@ -188,9 +224,6 @@ class SRAExtractor:
         Robust streaming download with resume support.
         Returns Path or None on failure.
         """
-        import requests
-        from tqdm import tqdm
-
         outpath = Path(outpath)
         tmp_path = outpath.with_suffix(outpath.suffix + ".part")
         headers = {}
@@ -259,7 +292,9 @@ class SRAExtractor:
                 # quick skip if gz already present
                 if any(run_dir.glob("*.fastq.gz")):
                     print(f"✅ {run} already downloaded — skipping.")
-                    writer.writerow([run, "exists", "existing", time.strftime("%Y-%m-%d %H:%M")])
+                    writer.writerow(
+                        [run, "exists", "existing", time.strftime("%Y-%m-%d %H:%M")]
+                    )
                     continue
 
                 print(f"\n🔽 Downloading {run}...")
@@ -279,36 +314,52 @@ class SRAExtractor:
                                 continue
 
                         # If file is not gz, compress it
-                        if outpath.suffix != ".gz" and not outpath.name.endswith(".fastq.gz"):
+                        if outpath.suffix != ".gz" and not outpath.name.endswith(
+                            ".fastq.gz"
+                        ):
                             # assume it's fastq; compress in place
                             self._compress_fastq(outpath, threads=threads)
                             outpath = outpath.with_suffix(outpath.suffix + ".gz")
                         downloaded_files.append(str(outpath))
-                    writer.writerow([run, "downloaded", ";".join(downloaded_files), time.strftime("%Y-%m-%d %H:%M")])
+                    writer.writerow(
+                        [
+                            run,
+                            "downloaded",
+                            ";".join(downloaded_files),
+                            time.strftime("%Y-%m-%d %H:%M"),
+                        ]
+                    )
 
                 else:
-                    print(f"⚠️ No ENA FASTQ found for {run}. Attempting NCBI prefetch...")
+                    print(
+                        f"⚠️ No ENA FASTQ found for {run}. Attempting NCBI prefetch..."
+                    )
                     try:
                         # Force prefetch to put the .sra file inside the run_dir
                         prefetch_cmd = [
                             "prefetch",
                             run,
-                            "--output-directory", str(run_dir)
+                            "--output-directory",
+                            str(run_dir),
                         ]
                         run_cmd(prefetch_cmd)
 
                         # find the sra file under run_dir (prefetch may create nested dirs)
                         sra_candidates = list(run_dir.rglob(f"{run}.sra"))
                         if not sra_candidates:
-                            raise FileNotFoundError(f".sra file for {run} not found under {run_dir}")
+                            raise FileNotFoundError(
+                                f".sra file for {run} not found under {run_dir}"
+                            )
                         sra_path = sra_candidates[0]
 
                         # Convert SRA -> FASTQ
                         fasterq_cmd = [
                             "fasterq-dump",
                             str(sra_path),
-                            "-O", str(run_dir),
-                            "--threads", str(threads)
+                            "-O",
+                            str(run_dir),
+                            "--threads",
+                            str(threads),
                         ]
                         run_cmd(fasterq_cmd)
 
@@ -326,16 +377,201 @@ class SRAExtractor:
                         if not gz_files:
                             raise RuntimeError("fasterq-dump produced no .fastq files")
 
-                        writer.writerow([run, "downloaded_ncbi", ";".join(gz_files),
-                                        time.strftime("%Y-%m-%d %H:%M")])
+                        writer.writerow(
+                            [
+                                run,
+                                "downloaded_ncbi",
+                                ";".join(gz_files),
+                                time.strftime("%Y-%m-%d %H:%M"),
+                            ]
+                        )
                         downloaded_files = gz_files
 
                     except Exception as e:
                         print(f"❌ NCBI fallback failed for {run}: {e}")
-                        writer.writerow([run, "failed", str(e),
-                                        time.strftime("%Y-%m-%d %H:%M")])
+                        writer.writerow(
+                            [run, "failed", str(e), time.strftime("%Y-%m-%d %H:%M")]
+                        )
 
         print("[INFO] All downloads completed.")
+
+    def find_sra_ids_with_antibiogram(
+        self, organism: str, retmax: int, start: int = 0
+    ) -> list:
+        """Searches for BioSamples that are from the corresponding organism
+        and contains a antibiogram table. And links the found biosample ids to a SRA run identifiers
+        """
+        term = f"{organism}[Organism] AND antibiogram[filter]"
+        h = Entrez.esearch(db="biosample", term=term, retstart=start, retmax=retmax)
+        r = Entrez.read(h)
+        biosample_ids = r.get("IdList", [])
+        sra_ids = []
+        # link biosample to sra run id
+        for bid in biosample_ids:
+            try:
+                link = Entrez.elink(dbfrom="biosample", db="sra", id=bid)
+                record = Entrez.read(link)
+            except (IOError, RuntimeError, Parser.ValidationError):
+                continue
+    
+            for item in record[0].get("LinkSetDb", []):
+                if item.get("DbTo") == "sra":
+                    for link_item in item.get("Link", []):
+                        sra_ids.append(link_item["Id"])
+        return sra_ids
+
+    def fetch_sra_metadata(self, sra_ids: list) -> pd.DataFrame:
+        """retrieves sra metadata based on sra_ids list. Returns a dataframe only containing paired sequences."""
+        df = pd.DataFrame()
+        if not sra_ids:
+            return df
+        with Entrez.efetch(
+            db="sra", id=",".join(sra_ids), rettype="runinfo", retmode="text"
+        ) as handle:
+            raw = handle.read()
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", errors="replace")
+        df = pd.read_csv(io.StringIO(str(raw)))
+        df = df[df["LibraryLayout"] == "PAIRED"]  # only paired sequences
+        return df
+
+    def fetch_antibiogram_and_host(
+        self, biosample_id: str
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Fetches BioSample XML once, extracts antibiogram table and host metadata, returns two dataframes."""
+        if not biosample_id:
+            return pd.DataFrame(), pd.DataFrame()
+
+        try:
+            h = Entrez.efetch(db="biosample", id=biosample_id, rettype="xml")
+            data = h.read()
+            root = ET.fromstring(data)
+        except:
+            return pd.DataFrame(), pd.DataFrame()
+
+        # extract antibiogram
+        table = root.find(".//Table")
+        if table is None:
+            antibiogram_df = pd.DataFrame()
+        else:
+            header = table.find("Header").findall("Cell")
+            columns = [c.text for c in header]
+            rows = []
+            for row in table.find("Body").findall("Row"):
+                cells = [cell.text or "" for cell in row.findall("Cell")]
+                rows.append(cells)
+            antibiogram_df = pd.DataFrame(rows, columns=columns)
+
+        if not self._contains_carbapenem(antibiogram_df):  # if no carabapenem present
+            antibiogram_df = pd.DataFrame()
+
+        # extract host metadata
+        attrs = root.findall(".//Attributes/Attribute")
+        host = {}
+        for attr in attrs:
+            name = (
+                attr.get("display_name")
+                or attr.get("attribute_name")
+                or attr.get("harmonized_name")
+            )
+            if not name:
+                continue
+            host[name] = attr.text or ""
+
+        host_df = pd.DataFrame([host])
+
+        return antibiogram_df, host_df
+
+    def _contains_carbapenem(self, df: pd.DataFrame) -> bool:
+        if df.empty:
+            return False
+        # normalize column names
+        cols = {c.lower(): c for c in df.columns}
+        drug_col = None
+        for key in ("antibiotic", "drug", "agent"):
+            if key in cols:
+                drug_col = cols[key]
+                break
+
+        if drug_col is None:
+            return False
+
+        drugs = df[drug_col].astype(str).str.lower().str.strip()
+        return drugs.isin(self.CARBAPENEMS).any()
+
+    def collect_resistant_metadata(
+        self, organism: str, retmax: int, batchsize_: int = 20
+    ) -> pd.DataFrame:
+        """Keep searching SRA id, antibiogram filtering, host-metadata aggregation.
+        Until retmax number has been reached and then saves sample and host metadata. 
+        or a 10 minute maximum has been reached."""
+        collected_metadata = []
+        collected_host_metadata = []
+        start_index_batch = 0
+
+        start_time = time.time()
+        timeout_seconds = 600 #10 minutes (600 seconds) maximum timeout 
+
+        print(f"[INFO] Starting collection for {organism}. Timeout set to {timeout_seconds}s.")
+        while len(collected_metadata) < retmax:
+            elapsed = time.time() - start_time
+            if elapsed > timeout_seconds:
+                print(f"[TIMEOUT] Reached {int(elapsed)}s limit. Saving partial data ({len(collected_metadata)} samples).")
+                break
+    
+            sra_ids = self.find_sra_ids_with_antibiogram(organism, retmax, start_index_batch)
+            sample_metadata_df = self.fetch_sra_metadata(sra_ids)
+            self._save_batch(
+                sample_metadata_df, collected_metadata, collected_host_metadata
+            )
+            start_index_batch += batchsize_  # move to next batch
+
+        return self._write_outputs(collected_metadata, collected_host_metadata)
+
+    def _save_batch(self, metadata_df, collected_metadata, collected_host_metadata):
+        """Processes one sample metadata batch: saves only samples with antibiograms and corresponding host metadata."""
+        for biosample_id in metadata_df["BioSample"]:
+
+            ast, host = self.fetch_antibiogram_and_host(biosample_id)
+            if ast.empty:
+                continue
+
+            ast.to_csv(self.ast_dir / f"{biosample_id}.csv", index=False)
+
+            collected_host_metadata.append(host.assign(BioSample=biosample_id))
+
+            row = metadata_df[metadata_df["BioSample"] == biosample_id]
+            collected_metadata.append(row)
+
+    def _write_outputs(self, collected_metadata, collected_host_metadata):
+        """Combines all host metadata into one file and returns the combined sample metadata table."""
+        if not collected_metadata:
+            return pd.DataFrame()
+
+        if collected_host_metadata:
+            host_df = pd.concat(collected_host_metadata, ignore_index=True)
+            output_file = self.host_metadata_dir / "host_metadata_all.csv"
+
+            if output_file.exists():
+                # Load only the 'BioSample' column from the existing file to save memory
+                existing_ids = pd.read_csv(output_file, usecols=['BioSample'])['BioSample'].values
+                new_unique_rows = host_df[~host_df['BioSample'].isin(existing_ids)]# Filter host_df to keep only IDs NOT in the existing file
+            else:
+                new_unique_rows = host_df                # File doesn't exist, so all rows are added
+            
+            # Only save if there is actually something new
+            if not new_unique_rows.empty:
+                file_exists = output_file.exists()
+                new_unique_rows.to_csv(
+                    output_file, 
+                    mode='a', 
+                    index=False, 
+                    header=not file_exists
+                )
+                print(f"[INFO] Added {len(new_unique_rows)} new unique records.")
+            else:
+                print("[INFO] No new unique BioSamples to add.")
+        return pd.concat(collected_metadata, ignore_index=True)
 
 
 #######################################################
@@ -345,20 +581,31 @@ class SRAExtractor:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="SRA metadata fetcher & sequence downloader")
+    parser = argparse.ArgumentParser(
+        description="SRA metadata fetcher & sequence downloader"
+    )
     parser.add_argument("--email", type=str, help="Your email (required by NCBI)")
     parser.add_argument("--organism", type=str, help="Organism name")
-    parser.add_argument("--retmax", type=int, default=20, help="Number of samples to fetch")
-    parser.add_argument("--download", action="store_true", help="Download sequences after fetching metadata")
+    parser.add_argument(
+        "--retmax", type=int, default=20, help="Number of samples to fetch"
+    )
+    parser.add_argument(
+        "--download",
+        action="store_true",
+        help="Download sequences after fetching metadata",
+    )
     parser.add_argument("--runs", type=str, help="Comma-separated SRR IDs to download")
-    parser.add_argument("--threads", type=int, default=4, help="Threads for fasterq-dump / pigz")
+    parser.add_argument(
+        "--threads", type=int, default=4, help="Threads for fasterq-dump / pigz"
+    )
     args = parser.parse_args()
 
     ex = SRAExtractor(email=args.email)
     organism = args.organism or input("Enter organism name: ")
-    df = ex.fetch_runinfo(organism, retmax=args.retmax)
+    # any sequence:fetch_runinfo(); only paired:fetch_runinfo_paired();known AST sequences:resistant_paired_metadata
+    df = ex.collect_resistant_metadata(organism, args.retmax)
     fname = f"SraRunInfo_{organism.replace(' ', '_')}.csv"
-    ex.save_metadata(df, fname)
+    ex.save_metadata(df, fname)  # save metadata to csv file: data/metadata
     ex.preview_metadata(fname, n=5)
 
     if args.download or input("Download sequences? (y/n): ").lower() in ("y", "yes"):

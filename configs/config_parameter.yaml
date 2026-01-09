@@ -1,0 +1,19 @@
+organism: Klebsiella pneumoniae
+email: sapom21439@fftube.com
+retmax: 1
+ml:
+  column_target_name: dfgdfgjdfklj
+  scaling:
+    method: standard
+  split:
+    test_size: 0.3
+    validation_size: 0.1
+    stratify: false
+    random_state: 42
+genome_completeness_qc:
+  completeness:
+    min: 99
+  contamination:
+    max: 3
+  total_contigs:
+    max: 500

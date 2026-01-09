@@ -2,6 +2,9 @@
 data/
 */data/
 
+#ignore snakemake folder
+.snakemake/
+
 # Ignore large files
 *.sra
 *.fastq

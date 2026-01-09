@@ -1,0 +1,9 @@
+name: gast-python-basic-packages
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pandas
+  - numpy
+  - scikit-learn
+  - pyyaml
