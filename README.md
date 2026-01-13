@@ -188,3 +188,19 @@ While the pipeline defaults to Klebsiella pneumoniae, its modular design allows 
 2. Update the organism name in the `AMRFinder rule` to match the corresponding AMR organism name (may introduce a bracket instead of a space)
 
 
+**Vocabulary**
+
+* **AST (Antimicrobial Susceptibility Testing)**
+  Laboratory testing that determines whether a microorganism is susceptible, intermediate, or resistant to specific antimicrobial agents.
+
+* **AMR (Antimicrobial Resistance)**
+  The ability of a microorganism to survive or grow despite exposure to an antimicrobial drug that would normally inhibit or kill it.
+
+* **Host metadata**
+  Structured contextual information describing the host organism from which a sample was obtained, such as species, age and gender.
+
+* **Sample metadata**
+  Descriptive information associated with a biological sample, including collection date, location, sample type, processing details, and identifiers.
+
+* **Antibiogram**
+  A summarized profile of antimicrobial susceptibility results (AST), typically reporting resistance and susceptibility patterns across multiple antibiotics.

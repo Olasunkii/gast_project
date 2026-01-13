@@ -1,12 +1,13 @@
+import argparse
 import pandas as pd
 from pathlib import Path
 import yaml
-import argparse
-
 
 class PhenotypeChecker:
-    def __init__(self, input_folder, config_file, output_file):
-        self.input_folder = Path(input_folder)
+    """Checks whether the resistance label and dosage are in line with EUCAST defintions stated in the conf.yaml.
+        Input: Folder path to AST CSV/ Antibiogram"""
+    def __init__(self, ast_input_folder, config_file, output_file):
+        self.ast_input_folder = Path(ast_input_folder)
         self.output_file = Path(output_file)
 
         with open(config_file, "r") as f:
@@ -15,8 +16,11 @@ class PhenotypeChecker:
         self.bp = self.config["breakpoints"]
 
     def run(self):
+        """Execute consistency checks on input CSV files and write the results.
+            Input: path to AST folder
+            Output: CSV file containing isolates that fall outside the EUCAST range."""
         out = []
-        for file in self.input_folder.glob("*.csv"):
+        for file in self.ast_input_folder.glob("*.csv"):
             df = pd.read_csv(file)
             if not self._has_required(df):
                 continue
@@ -31,10 +35,12 @@ class PhenotypeChecker:
                 )
 
     def _has_required(self, df):
+        """Check whether the input DataFrame contains the required columns."""
         c = df.columns
         return "Antibiotic" in c and "Measurement" in c and "Resistance phenotype" in c
 
     def _check_file(self, sample_name, df):
+        """Validate reported resistance phenotypes against expected classifications."""
         acc = []
 
         for _, row in df.iterrows():
@@ -66,6 +72,7 @@ class PhenotypeChecker:
         return acc
 
     def _classify(self, ab, mic):
+        """Classifies antibiotic susceptibility based on Minimum Inhibitory Concentration (MIC)."""
         if pd.isna(mic):
             return None
         try:
@@ -88,6 +95,7 @@ class PhenotypeChecker:
         return None
 
     def _normalize_sir(self, x):
+        """Normalizes various string synonyms of SIR phenotypes to standard codes."""
         if not isinstance(x, str):
             return None
         v = x.strip().lower()

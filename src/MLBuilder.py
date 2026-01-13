@@ -28,6 +28,8 @@ class MLBuilder:
             self.config_params = yaml.safe_load(f)
 
     def run(self):
+        """Callable function that prepares data for machine learning by dropping the target column, 
+        splitting the dataset, scaling numeric features, and deriving the target variable."""
         self.df = pd.read_csv(self.input_file)
         self._derive_carbapenem_target()  # derive target + remove leakage
 

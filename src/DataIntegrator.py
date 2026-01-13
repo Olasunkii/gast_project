@@ -2,8 +2,8 @@ import pandas as pd
 from pathlib import Path
 import sys
 
-
 class Integration:
+    """Integrates host metadata, AST table, presence/absence matric and corresponding draft genome into a CSV file."""
     def __init__(
         self,
         seq_dir,
@@ -24,7 +24,9 @@ class Integration:
         self.output = Path(output)
 
     def run(self):
-        """Integrates step-for-step host metadata, AST information, AMR resistance genes and draft genome."""
+        """Integrates step-for-step host metadata, AST information, AMR resistance genes and draft genome.
+            Input: host and sample metadata files, paths to draft genome, annotated resistance genes and AST table.
+            Output: CSV file integrated all data sources."""
         base = pd.read_csv(self.sample_metadata_file)
         self.integrated_df = base[
             ["BioSample", "Run", "Model"]
@@ -67,7 +69,7 @@ class Integration:
         print(f"AST Data: {len(matched)} samples matched with phenotypic data.")
 
     def integrate_sequences(self):
-        """Adding the raw assembled draft genome to the metadata table under clumn Assembled_seq"""
+        """Adding the raw assembled draft genome to the metadata table under column Assembled_seq"""
         # loop over assembly fasta paths mapped by sample
         for sample, fasta_path in self.assembly_map.items():
             if sample not in self.integrated_df["Run"].values:
@@ -79,6 +81,7 @@ class Integration:
             ] = seq  # seq contains raw DNA sequence
 
     def integrate_amr(self):
+        """Integrates the AMR file with"""
         amr_gene_presence_df = pd.read_csv(self.amr_file)
         self.integrated_df = self.integrated_df.merge(
             amr_gene_presence_df, left_on="Run", right_on="run_id", how="left"

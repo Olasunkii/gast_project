@@ -2,13 +2,16 @@ import argparse
 from pathlib import Path
 import pandas as pd
 
-
 class AMRTransformer:
+    """Transforms AMR file (output of AMRFinder) to an present/absent dataframe"""
     def __init__(self, amr_files, output_file):
         self.amr_files = [Path(f) for f in amr_files]
         self.output_file = Path(output_file)
 
     def run(self):
+        """Callable function to start the transformation process.
+            Input: Path to folder containg AMR files.
+            Output: CSV file containing presence gene dataframe."""
         amr_long_df = self._load_long_amr()
         if amr_long_df.empty:
             self.output_file.write_text("")
@@ -18,6 +21,9 @@ class AMRTransformer:
         presence_df.to_csv(self.output_file, index=True)
 
     def _load_long_amr(self):
+        """Loads AMR result files and extract `element symbols` column in long format.
+            Input: AMR files
+            Output: Pandas dataframe containing element symbols and corresponding run IDss"""
         dfs = []
 
         for amr_file in self.amr_files:
@@ -42,6 +48,7 @@ class AMRTransformer:
         return amr_long
 
     def _build_gene_presence_matrix(self, amr_long):
+        """Creates a binary gene presence matrix from transformed long AMR data."""
         ct = pd.crosstab(amr_long["run_id"], amr_long["Element symbol"])
         presence = (ct > 0).astype(int)
         presence.columns = [f"gene_{col}_present" for col in presence.columns]
