@@ -194,13 +194,13 @@ While the pipeline defaults to Klebsiella pneumoniae, its modular design allows 
   Laboratory testing that determines whether a microorganism is susceptible, intermediate, or resistant to specific antimicrobial agents.
 
 * **AMR (Antimicrobial Resistance)**
-  The ability of a microorganism to survive or grow despite exposure to an antimicrobial drug that would normally inhibit or kill it.
+  The ability of a microorganism to survive or grow despite exposure to an antimicrobial drug (e.g. Carabapenem) that would normally inhibit or kill it.
 
 * **Host metadata**
-  Structured contextual information describing the host organism from which a sample was obtained, such as species, age and gender.
+  Contextual information describing the host organism from which a sample was obtained, such as species, age and gender. These are in line with GDPR.
 
 * **Sample metadata**
   Descriptive information associated with a biological sample, including collection date, location, sample type, processing details, and identifiers.
 
 * **Antibiogram**
-  A summarized profile of antimicrobial susceptibility results (AST), typically reporting resistance and susceptibility patterns across multiple antibiotics.
+  A summarized table of AST results reporting resistance and susceptibility patterns across multiple antibiotics.
