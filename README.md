@@ -207,5 +207,5 @@ While the pipeline defaults to Klebsiella pneumoniae, its modular design allows 
 
 
   ##  Acknowledgement
-Our profound thanks goes to our supervisor at UMCG, Xavier Britto for his consistent support, guidance and feedback throughout the project. Also, we would like our teachers at the department of Life Sciences at the Hanze university of Applied Sciences for their encouragement and guidance. Special thanks to Fenna Feenstra and Tijs van Lieshout for the constructive feedback during our presentations. 
+Our profound thanks goes to our supervisor at UMCG, Basil Xavier for his consistent support, guidance and feedback throughout the project. Also, we would like our teachers at the department of Life Sciences at the Hanze university of Applied Sciences for their encouragement and guidance. Special thanks to Fenna Feenstra and Tijs van Lieshout for the constructive feedback during our presentations. 
 
